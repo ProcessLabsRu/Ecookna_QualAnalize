@@ -1,0 +1,7 @@
+aiogram>=3.17.0
+sqlalchemy>=2.0.25
+asyncpg>=0.29.0
+pdfplumber>=0.10.3
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.1
+loguru>=0.7.2

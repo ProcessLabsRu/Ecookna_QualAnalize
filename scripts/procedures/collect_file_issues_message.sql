@@ -392,6 +392,19 @@ BEGIN
         END IF;
       END IF;
 
+      -- -------------------------------------------------
+      -- 3) SLIP_FORMULA_MISSING
+      -- -------------------------------------------------
+      SELECT count(*)
+      INTO i
+      FROM public.qual_analize_pos_issues ii
+      WHERE ii.pos_id = p.id
+        AND ii.issue_code = 'SLIP_FORMULA_MISSING';
+
+      IF i > 0 THEN
+        lines := lines || '— Отсутствует формула в таблице слипания (не найдены f1 и f2)';
+      END IF;
+
       IF lines IS NULL OR array_length(lines,1) IS NULL THEN
         lines := ARRAY['— Несоответствие формулы требованиям таблицы слипаемости (детализация недоступна)'];
       END IF;
