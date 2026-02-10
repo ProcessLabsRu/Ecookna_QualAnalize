@@ -1,0 +1,1 @@
+EXECUTE FUNCTION fn_fill_article_json();

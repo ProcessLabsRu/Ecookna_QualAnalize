@@ -1,0 +1,1 @@
+EXECUTE FUNCTION trg_calc_qual_pos();

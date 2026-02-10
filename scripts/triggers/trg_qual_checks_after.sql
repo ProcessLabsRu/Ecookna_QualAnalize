@@ -1,0 +1,1 @@
+EXECUTE FUNCTION trg_qual_checks_after();

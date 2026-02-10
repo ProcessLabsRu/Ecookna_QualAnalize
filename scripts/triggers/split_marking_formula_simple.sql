@@ -1,0 +1,1 @@
+EXECUTE FUNCTION split_marking_formula_simple();

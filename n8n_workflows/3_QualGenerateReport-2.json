@@ -1,0 +1,256 @@
+{
+  "name": "3_QualGenerateReport",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "={{ $('Start').item.json.message_chat_id_firstItem }}",
+        "text": "=По результатам проверки отклонений от установленных правил и регламентов нет",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -752,
+        592
+      ],
+      "id": "f9509df8-99ad-48ce-8eda-23b1c6d54c82",
+      "name": "Send a text message4",
+      "webhookId": "c77a8b44-d3b5-4da2-9c60-1b965a25f9c4",
+      "credentials": {
+        "telegramApi": {
+          "id": "4EWvhWsUO2UFBWsE",
+          "name": "TestEcooknaBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node (JavaScript)\n// Input: [{ collect_file_issues_message: \"...\" }]\n// Output: { tg_messages: [msg1, msg2, ...], tg_message: msg1, summary: {...} }\n\nfunction escapeHtml(str) {\n  return String(str)\n    .replace(/&/g, \"&amp;\")\n    .replace(/</g, \"&lt;\")\n    .replace(/>/g, \"&gt;\");\n}\n\nconst TG_LIMIT = 4096;\n\n// Режем сообщения под лимит Telegram, стараясь не ломать позиционные блоки\nfunction packChunks(blockHtmlList, headerHtml, limit = TG_LIMIT) {\n  const chunks = [];\n  let buf = headerHtml;\n\n  for (const b of blockHtmlList) {\n    const piece = (buf ? \"\\n\\n\" : \"\") + b;\n\n    if ((buf + piece).length <= limit) {\n      buf += piece;\n      continue;\n    }\n\n    if (buf) chunks.push(buf);\n\n    // Если один блок слишком большой — режем его грубо (редко, но бывает)\n    if ((headerHtml + \"\\n\\n\" + b).length > limit) {\n      const raw = b;\n      for (let i = 0; i < raw.length; i += limit) {\n        chunks.push(raw.slice(i, i + limit));\n      }\n      buf = \"\";\n    } else {\n      buf = headerHtml + \"\\n\\n\" + b;\n    }\n  }\n\n  if (buf) chunks.push(buf);\n  return chunks;\n}\n\n/**\n * КЛЮЧЕВОЕ: группируем по строкам.\n * Новый блок начинается ТОЛЬКО когда строка начинается с:\n *   \"Позиция ...\" или \"Позиция №...\"\n * Пустые строки внутри блока НЕ разрывают позицию.\n */\nfunction splitIntoPositionBlocks(text) {\n  const lines = text.replace(/\\r\\n/g, \"\\n\").split(\"\\n\");\n  const blocks = [];\n  let cur = [];\n\n  const isPosLine = (line) => /^Позиция(?:\\s+№)?\\s+/i.test(line.trim());\n\n  for (const line of lines) {\n    if (isPosLine(line)) {\n      if (cur.length) blocks.push(cur.join(\"\\n\").trim());\n      cur = [line.trim()];\n    } else {\n      // сохраняем пустые строки внутри позиции — чтобы читалось\n      cur.push(line);\n    }\n  }\n  if (cur.length) blocks.push(cur.join(\"\\n\").trim());\n\n  // уберём мусорные пустые блоки\n  return blocks.map((b) => b.trim()).filter(Boolean);\n}\n\n// --- main ---\nconst raw = items?.[0]?.json?.collect_file_issues_message;\n\n// Если SQL вернул пусто/NULL — сразу \"нет отклонений\"\nif (!raw || typeof raw !== \"string\" || !raw.trim()) {\n  const msg = \"По результатам проверки отклонений от установленных правил и регламентов нет\";\n  return [\n    {\n      json: {\n        tg_messages: [msg],\n        tg_message: msg,\n        summary: { positions: 0, issues: 0, errors: 0, warnings: 0 },\n      },\n    },\n  ];\n}\n\nconst text = raw.trim();\n\n// 1 позиция = 1 text-block\nconst posBlocks = splitIntoPositionBlocks(text);\n\nlet positions = 0;\nlet issues = 0;\nlet errors = 0;\nlet warnings = 0;\n\nconst renderedBlocks = [];\n\nfor (const b of posBlocks) {\n  // Определяем, есть ли нарушение в этом блоке\n  const errCount = (b.match(/\\[ERROR\\]/gi) || []).length;\n  const warnCount = (b.match(/\\[(WARN|WARNING)\\]/gi) || []).length;\n\n  // Slip-блоки без [ERROR] считаем нарушением по ключевой строке\n  const hasSlip = /Выявленные\\s+несоответствия/i.test(b);\n\n  // Если у тебя в SQL теперь НЕТ [ERROR]/[WARN], а только эмодзи ⛔️/⚠️/ℹ️ —\n  // оставим дополнительную проверку по эмодзи, чтобы не потерять нарушения:\n  const hasIconError = /⛔️/u.test(b);\n  const hasIconWarn = /⚠️/u.test(b);\n\n  const hasAnyIssue =\n    errCount > 0 ||\n    warnCount > 0 ||\n    hasSlip ||\n    hasIconError ||\n    hasIconWarn;\n\n  if (!hasAnyIssue) continue;\n\n  positions += 1;\n\n  // Счётчики:\n  // 1) если есть старые маркеры [ERROR]/[WARN] — используем их\n  // 2) иначе считаем по иконкам\n  const countByIconError = (b.match(/⛔️/gu) || []).length;\n  const countByIconWarn = (b.match(/⚠️/gu) || []).length;\n\n  errors += errCount || countByIconError;\n  warnings += warnCount || countByIconWarn;\n\n  // slip отдельно добавляем как нарушение (если он есть и не был учтён как ⛔️)\n  issues += (errCount + warnCount) > 0\n    ? (errCount + warnCount)\n    : (countByIconError + countByIconWarn);\n\n  if (hasSlip && (errCount + warnCount + countByIconError + countByIconWarn) === 0) {\n    // на крайний случай, если slip-блок вообще без маркеров и иконок\n    errors += 1;\n    issues += 1;\n  }\n\n  // Один <pre> на одну позицию\n  renderedBlocks.push(`<pre>${escapeHtml(b)}</pre>`);\n}\n\n// ✅ КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: если после фильтрации нет блоков — не шлём \"пустой отчёт\"\nif (renderedBlocks.length === 0) {\n  const msg = \"По результатам проверки отклонений от установленных правил и регламентов нет\";\n  return [\n    {\n      json: {\n        tg_messages: [msg],\n        tg_message: msg,\n        summary: { positions: 0, issues: 0, errors: 0, warnings: 0 },\n      },\n    },\n  ];\n}\n\nconst header =\n  `<b>📋 Отчёт по проверкам стеклопакетов</b>\\n` +\n  `Позиции: <b>${positions}</b> · Нарушения: <b>${issues}</b>\\n` +\n  `Ошибки: <b>${errors}</b> · Предупр.: <b>${warnings}</b>`;\n\nconst tg_messages = packChunks(renderedBlocks, header, TG_LIMIT);\n\nif (tg_messages.length > 1) {\n  const note = `\\n\\n<i>Сообщение разбито на ${tg_messages.length} частей из-за ограничения Telegram.</i>`;\n  const last = tg_messages[tg_messages.length - 1];\n  tg_messages[tg_messages.length - 1] =\n    last.length + note.length <= TG_LIMIT ? last + note : last;\n}\n\nreturn [\n  {\n    json: {\n      tg_messages,\n      tg_message: tg_messages[0],\n      summary: { positions, issues, errors, warnings },\n    },\n  },\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -752,
+        400
+      ],
+      "id": "5f85b110-d8fc-4de3-92e4-4c42768f30a4",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Start').item.json.message_chat_id_firstItem }}",
+        "text": "={{ $json.tg_messages }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -320,
+        400
+      ],
+      "id": "ee5d7c3a-da75-4147-8058-3ddcb92c38d4",
+      "name": "Send a text message5",
+      "webhookId": "c77a8b44-d3b5-4da2-9c60-1b965a25f9c4",
+      "alwaysOutputData": true,
+      "credentials": {
+        "telegramApi": {
+          "id": "4EWvhWsUO2UFBWsE",
+          "name": "TestEcooknaBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "id",
+              "type": "any"
+            },
+            {
+              "name": "message_chat_id_firstItem",
+              "type": "any"
+            }
+          ]
+        }
+      },
+      "id": "8f452b28-ccbd-443e-aa94-c427d2bed1ab",
+      "typeVersion": 1.1,
+      "name": "Start",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        -1424,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT collect_file_issues_message({{ $json.id }});",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -1200,
+        496
+      ],
+      "id": "705594a1-e953-4e20-8c41-56a4b5f79bd3",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "6JdB36rnzSP4vDVm",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c653653a-8d3f-406b-8ca4-4ca9e9eb9732",
+              "leftValue": "={{ $json.collect_file_issues_message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -976,
+        496
+      ],
+      "id": "7e60b815-b318-4306-8ea2-63bfa2b721a9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "tg_messages",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -544,
+        400
+      ],
+      "id": "a06063a0-1d14-4617-ad2d-234e3837ae80",
+      "name": "Split Out"
+    }
+  ],
+  "pinData": {
+    "Start": [
+      {
+        "json": {
+          "id": 34,
+          "message_chat_id_firstItem": 741409270
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message5": {
+      "main": [
+        []
+      ]
+    },
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Send a text message5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "5d11be38-7c06-439e-badb-d1820e38f633",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "721ab70d4d315d54bed19e17cef2128dfab1224c2d6738b18ce1e1f980f69628"
+  },
+  "id": "HnXUOZ31uHmUTNx1",
+  "tags": []
+}
