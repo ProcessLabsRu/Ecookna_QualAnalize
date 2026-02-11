@@ -1,6 +1,7 @@
 import logging
 import os
 import tempfile
+import html
 from aiogram import Router, types, F, Bot
 from aiogram.filters import MagicData
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -105,17 +106,20 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
                 issues_count += 1
                 
                 # Format Error Message for Report
-                # Format Error Message for Report
-                pos_header = f"Позиция №{item['position_num']} ({w}x{h})"
+                # Escape values to prevent HTML parsing errors
+                safe_pos_num = html.escape(str(item['position_num']))
+                pos_header = f"Позиция №{safe_pos_num} ({w}x{h})"
                 
                 opening_scheme = "Наружу ↗️" if item["is_oytside"] else "Внутрь ↙️"
-                form_info = f"Формула: {item['position_formula']}\nОткрывание: {opening_scheme}"
+                safe_formula = html.escape(item['position_formula'])
+                form_info = f"Формула: {safe_formula}\nОткрывание: {opening_scheme}"
                 if item["is_oytside"]:
                     form_info += " (формула перевернута)"
                 
-                error_txt = "\n".join([f"⛔️ {err}" for err in slip_errors])
+                # Escape error messages which may check contain "<" or ">"
+                error_txt = "\n".join([f"⛔️ {html.escape(err)}" for err in slip_errors])
                 
-                block = f"{pos_header}\n{form_info}\n{error_txt}\n"
+                block = f"<b>{pos_header}</b>\n{form_info}\n{error_txt}\n"
                 report_lines.append(block)
                 
                 # Save Issue to DB
@@ -131,7 +135,8 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
         await session.commit()
         
         # 4. Send Report
-        final_text = generate_report_text(file_name, len(items), report_lines, issues_count)
+        # Ensure filename is also escaped for the report header
+        final_text = generate_report_text(html.escape(file_name), len(items), report_lines, issues_count)
         
         await status_msg.edit_text(final_text, parse_mode="HTML")
 
