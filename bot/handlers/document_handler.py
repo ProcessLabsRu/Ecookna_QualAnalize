@@ -108,7 +108,7 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
                 # Format Error Message for Report
                 pos_header = f"Позиция №{item['position_num']} ({w}x{h})"
                 
-                opening_scheme = "Наружу ↗️" if item["is_oytside"] else "Вовнутрь ↙️"
+                opening_scheme = "Наружу ↗️" if item["is_oytside"] else "Внутрь ↙️"
                 form_info = f"Формула: {item['position_formula']}\nОткрывание: {opening_scheme}"
                 if item["is_oytside"]:
                     form_info += " (формула перевернута)"

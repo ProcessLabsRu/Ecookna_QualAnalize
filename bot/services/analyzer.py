@@ -167,25 +167,27 @@ class Analyzer:
         
         match_found = False
         for opt in valid_options:
-            if actual_thicknesses == opt:
-                match_found = True
-                break
+            if len(actual_thicknesses) == len(opt):
+                # Check if ALL elements are >= required (Pass condition)
+                if all(act >= exp for act, exp in zip(actual_thicknesses, opt)):
+                    match_found = True
+                    break
         
         if not match_found:
              # Generate specific mismatch details avoiding "Mismatch!" title if possible, or make it descriptive
-             # We compare against the first valid option as primary reference, 
-             # but we should mention if there are others.
+             # We compare against the first valid option as primary reference
              primary_opt = valid_options[0]
              
              details = []
-             # Check lengths first (should match given cam_count logic, but safety first)
+             # Check lengths first
              limit = min(len(actual_thicknesses), len(primary_opt))
              
              for i in range(limit):
                  act = actual_thicknesses[i]
                  exp = primary_opt[i]
                  
-                 if act != exp:
+                 # Error only if strictly LESS than required
+                 if act < exp:
                      # Determine element name
                      el_type = formula_elements[i]['type']
                      # Count index of this type
@@ -193,38 +195,36 @@ class Analyzer:
                      
                      if el_type == 'glass':
                          type_name = "стекло"
-                         # Simple declension for 1..10
                          suffix = "-е"
-                         if cnt == 3: suffix = "-е" # 3-е
-                         # actually generic "-е" fits most neuter (стекло), except maybe numbers? 
-                         # 1-е, 2-е, 3-е, 4-е... fits well.
+                         if cnt == 3: suffix = "-е" 
                          name_str = f"{cnt}{suffix} {type_name}"
                      else:
                          type_name = "рамка"
-                         # feminine (рамка)
-                         # 1-я, 2-я, 3-я...
                          suffix = "-я"
                          if cnt == 3: suffix = "-я" 
                          name_str = f"{cnt}{suffix} {type_name}"
                      
-                     details.append(f"{name_str}: {act} мм (в заказе) ≠ {exp} мм (норма)")
+                     details.append(f"{name_str}: {act} мм (в заказе) < {exp} мм (норма)")
              
-             # Construct message
-             msg = "Обнаружено несоответствие:\n"
+             # If details is empty but match_found is False, it implies logic error or length mismatch?
+             # Or maybe it failed against primary_opt but passed against another? No, we checked all.
+             # If details empty here, it means for primary_opt everything is >=. 
+             # But we are here because NO option was fully >=.
+             # So primary_opt MUST have some < failures OR length mismatch.
+             
              if details:
+                 # Construct message
+                 msg = "Обнаружено несоответствие:\n"
                  msg += "\n".join([f"❌ {d}" for d in details]) + "\n"
-             
-             msg += f"\nФормула из заказа: {actual_thicknesses}"
-             msg += f"\nФормула по таблице слипаемости: {primary_opt}"
-             
-             if len(valid_options) > 1:
-                 # If multiple valid options exist, we might be comparing against the wrong one 
-                 # if the user intended the other. But usually they are close.
-                 # Let's list others briefly.
-                 others = ", ".join([str(o) for o in valid_options[1:]])
-                 msg += f" (или: {others})"
+                 
+                 msg += f"\nФормула из заказа: {actual_thicknesses}"
+                 msg += f"\nФормула по таблице слипаемости: {primary_opt}"
+                 
+                 if len(valid_options) > 1:
+                     others = ", ".join([str(o) for o in valid_options[1:]])
+                     msg += f" (или: {others})"
 
-             errors.append(msg)
+                 errors.append(msg)
 
         return errors
 
