@@ -113,10 +113,15 @@ class PDFParser:
 
                 # Normalize formula (take suffix after last space)
                 # "82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И" -> "4ИxН14x4М1xН14x4И"
-                if " " in raw_formula_clean:
-                    position_formula = raw_formula_clean.split(" ")[-1]
+                # Remove thickness from formula chunk if present
+                raw_formula_no_thick = PDFParser.THICK_RE.sub("", raw_formula_clean).strip()
+
+                # Normalize formula (take suffix after last space)
+                # "82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И" -> "4ИxН14x4М1xН14x4И"
+                if " " in raw_formula_no_thick:
+                    position_formula = raw_formula_no_thick.split(" ")[-1]
                 else:
-                    position_formula = raw_formula_clean
+                    position_formula = raw_formula_no_thick
 
                 # Parse numbers
                 try:

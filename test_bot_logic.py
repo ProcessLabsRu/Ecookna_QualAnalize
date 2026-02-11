@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def run_test():
-    file_path = "docs/examples/new format.pdf"
+    file_path = "docs/examples/тест11022026.pdf"
     
     if not os.path.exists(file_path):
         logger.error(f"File not found: {file_path}")
