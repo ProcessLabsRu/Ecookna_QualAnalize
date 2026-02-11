@@ -9,6 +9,7 @@ services:
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
       - DB_DSN=${DB_DSN}
+    command: python -m bot.main
 
   web:
     build: .

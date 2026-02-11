@@ -20,4 +20,9 @@ COPY . .
 ENV PYTHONPATH=/app
 
 # Command to run the bot
-CMD ["python", "-m", "bot.main"]
+# Make entrypoint executable
+COPY entrypoint.sh .
+RUN chmod +x entrypoint.sh
+
+# Command to run both bot and web
+CMD ["./entrypoint.sh"]
