@@ -105,10 +105,13 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
                 issues_count += 1
                 
                 # Format Error Message for Report
+                # Format Error Message for Report
                 pos_header = f"Позиция №{item['position_num']} ({w}x{h})"
-                form_info = f"Формула: {item['position_formula']}"
+                
+                opening_scheme = "Наружу ↗️" if item["is_oytside"] else "Вовнутрь ↙️"
+                form_info = f"Формула: {item['position_formula']}\nОткрывание: {opening_scheme}"
                 if item["is_oytside"]:
-                    form_info += " (НАРУЖУ - формула перевернута)"
+                    form_info += " (формула перевернута)"
                 
                 error_txt = "\n".join([f"⛔️ {err}" for err in slip_errors])
                 
@@ -128,21 +131,7 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
         await session.commit()
         
         # 4. Send Report
-        if not report_lines:
-            final_text = (
-                f"✅ Файл <b>{file_name}</b> проверен.\n"
-                f"Всего позиций: {len(items)}\n"
-                "Ошибок не обнаружено."
-            )
-        else:
-            header = f"⚠️ В файле <b>{file_name}</b> обнаружены проблемы ({issues_count} поз.):\n\n"
-            # Split if too long
-            full_report = header + "\n".join(report_lines)
-            
-            if len(full_report) > 4000:
-                final_text = full_report[:4000] + "\n\n... (отчет обрезан)"
-            else:
-                final_text = full_report
+        final_text = generate_report_text(file_name, len(items), report_lines, issues_count)
         
         await status_msg.edit_text(final_text, parse_mode="HTML")
 
@@ -153,6 +142,24 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
         await session.close()
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+def generate_report_text(file_name: str, total_items: int, report_lines: list, issues_count: int) -> str:
+    """Generates the final report text."""
+    if not report_lines:
+        return (
+            f"✅ Файл <b>{file_name}</b> проверен.\n"
+            f"Всего позиций: {total_items}\n"
+            "Ошибок не обнаружено."
+        )
+    else:
+        header = f"⚠️ В файле <b>{file_name}</b> обнаружены проблемы ({issues_count} поз.):\n\n"
+        full_report = header + "\n".join(report_lines)
+        
+        if len(full_report) > 4000:
+            return full_report[:4000] + "\n\n... (отчет обрезан)"
+        else:
+            return full_report
 
 
 @router.message(F.document)

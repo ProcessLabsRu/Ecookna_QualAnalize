@@ -44,7 +44,8 @@ class PDFParser:
             layout = layout_match.group(1).strip() if layout_match else "отсутствует"
 
             # Iterate over all items in the block
-            for m in PDFParser.ITEM_RE.finditer(block):
+            matches = list(PDFParser.ITEM_RE.finditer(block))
+            for i, m in enumerate(matches):
                 # 1. Extract raw groups
                 raw_num = m.group(1)
                 raw_formula = m.group(2)
@@ -55,22 +56,29 @@ class PDFParser:
                 raw_area = m.group(7)
                 raw_mass = m.group(8)
 
-                # 2. Clean and Normalize
+                # 2. Extract Post-Context (text after this item until next item or end)
+                start, end = m.span()
+                if i + 1 < len(matches):
+                    next_start = matches[i+1].start()
+                    post_context = block[end:next_start]
+                else:
+                    post_context = block[end:]
+
+                # 3. Clean and Normalize
                 position_num = raw_num.replace(" ", "").replace("\n", "").strip()
                 
-                # Clean formula for "is_outside" check (remove strict newlines but keep some structure if needed)
-                # Currently simple normalize space
+                # Check is_outside in formula AND post_context
+                # Clean formula only for formula analysis, but using raw+context for flags
                 raw_formula_clean = re.sub(r"\s+", " ", raw_formula).strip()
                 
-                # Check is_outside
-                formula_upper = raw_formula_clean.upper()
+                full_text_check = (raw_formula_clean + " " + post_context).upper()
+                
                 is_outside = (
-                    "СНАРУЖИ" in formula_upper or 
-                    "НАРУЖУ" in formula_upper or 
-                    raw_formula_clean.upper().endswith("FS") # regex check for FS suffix might be safer
+                    "СНАРУЖИ" in full_text_check or 
+                    "НАРУЖУ" in full_text_check or 
+                    re.search(r"FS\b", full_text_check) is not None or # FS word boundary
+                    raw_formula_clean.upper().endswith("FS") 
                 )
-                if not is_outside and re.search(r"FS$", raw_formula_clean, re.IGNORECASE):
-                     is_outside = True
 
                 # Normalize formula (take suffix after last space)
                 # "82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И" -> "4ИxН14x4М1xН14x4И"
