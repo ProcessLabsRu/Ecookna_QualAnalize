@@ -71,9 +71,31 @@ class PDFParser:
                 raw_num = num_match.group(1)
                 
                 # 2. Extract Formula
-                # Text between Number End and Anchor Start
+                # Text between Number End and Anchor Start (Suffix)
                 raw_formula_chunk = pre_context[num_match.end():].strip()
                 
+                # Check if suffix looks like a formula
+                suffix_has_formula = "x" in raw_formula_chunk.lower() or "х" in raw_formula_chunk.lower()
+                
+                # If suffix doesn't have formula, check Prefix (text before Number)
+                # But we need to be careful not to grab previous item's data if they are close
+                # `pre_context` includes everything from last_end.
+                # `num_match` is the last number found in `pre_context`.
+                # So prefix is everything before `num_match.start()` in `pre_context`.
+                prefix_text = pre_context[:num_match.start()].strip()
+                
+                # Decide which chunk to use as "raw_formula_chunk"
+                # If suffix has formula, prefer it (standard case)
+                # If not, and prefix has formula, use prefix
+                if not suffix_has_formula and ("x" in prefix_text.lower() or "х" in prefix_text.lower()):
+                    # Use prefix as formula source
+                    # But we also need to keep suffix for "Name/Attributes" (like 'KALEVA ALUVET FS')
+                    # So raw_formula_clean will be based on prefix, but is_outside check needs all
+                    raw_formula_source = prefix_text
+                    # We might want to append suffix to "Name" or just keep it for is_outside check
+                else:
+                    raw_formula_source = raw_formula_chunk
+
                 # 3. Extract Post-Context
                 # From Anchor End to start of next anchor (or block end)
                 if i + 1 < len(anchors):
@@ -92,7 +114,7 @@ class PDFParser:
 
                 # 5. Clean and Normalize
                 position_num = raw_num.replace(" ", "").replace("\n", "").strip()
-                raw_formula_clean = re.sub(r"\s+", " ", raw_formula_chunk).strip()
+                raw_formula_clean = re.sub(r"\s+", " ", raw_formula_source).strip()
                 
                 # Extract Thickness
                 # Check formula chunk first, then post-context
@@ -102,7 +124,9 @@ class PDFParser:
                 # thickness = int(thick_match.group(1)) if thick_match else 0 # Not strictly used yet
                 
                 # Check is_outside
-                full_text_check = (raw_formula_clean + " " + post_context).upper()
+                # We concatenate Prefix + Suffix + Post-Context to be sure we catch "FS" / "СНАРУЖИ"
+                # wherever it is (Name, or Formula, or Note)
+                full_text_check = (prefix_text + " " + raw_formula_chunk + " " + post_context).upper()
                 
                 is_outside = (
                     "СНАРУЖИ" in full_text_check or 
@@ -116,8 +140,6 @@ class PDFParser:
                 # Remove thickness from formula chunk if present
                 raw_formula_no_thick = PDFParser.THICK_RE.sub("", raw_formula_clean).strip()
 
-                # Normalize formula (take suffix after last space)
-                # "82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И" -> "4ИxН14x4М1xН14x4И"
                 if " " in raw_formula_no_thick:
                     # Split by space
                     parts = raw_formula_no_thick.split(" ")
@@ -132,7 +154,7 @@ class PDFParser:
                 else:
                     position_formula = raw_formula_no_thick
                 
-                logger.info(f"Item {position_num}: Raw='{raw_formula_no_thick}', Parsed='{position_formula}', IsOutside={is_outside}")
+                logger.info(f"Item {position_num}: RawSource='{raw_formula_clean}', Parsed='{position_formula}', IsOutside={is_outside}")
 
                 # Parse numbers
                 try:
