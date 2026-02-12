@@ -113,8 +113,49 @@ class PDFParser:
                 raw_mass = anchor.group(5)
 
                 # 5. Clean and Normalize
-                position_num = raw_num.replace(" ", "").replace("\n", "").strip()
+                # Start with the raw number (cleaned of newlines)
+                base_num = raw_num.replace("\n", "").strip()
+                
+                # Check if we should append suffix to the name
+                # If suffix does NOT look like a formula, we treat it as part of the Name/Position
+                # e.g. "ALUVET FS" in "00-134-1060/1/5/KALEVA ALUVET FS"
+                # formula usually has 'x' or 'х' (cyrillic)
+                
+                name_suffix = ""
                 raw_formula_clean = re.sub(r"\s+", " ", raw_formula_source).strip()
+                
+                # If we used raw_formula_chunk as source (standard case)
+                if raw_formula_source == raw_formula_chunk:
+                     # Check if it looks like a formula
+                    if not ("x" in raw_formula_chunk.lower() or "х" in raw_formula_chunk.lower()):
+                        # It's likely a name part
+                        name_suffix = " " + raw_formula_chunk.strip()
+                        # In this case, formula might be in prefix (already checked above logic)
+                        # or empty/missing. 
+                        # IF we decided earlier that prefix HAS formula (lines 90-94), then raw_formula_source is prefix
+                        # But here we are in the `else` branch of that decision (line 97), so raw_formula_source IS raw_formula_chunk.
+                        
+                        # Wait, logic above (lines 90-97) selects the formula SOURCE.
+                        # If we selected suffix as source, but it doesn't look like formula, 
+                        # maybe we should have selected prefix?
+                        # Or maybe it IS the name and formula is missing?
+                        pass
+
+                # Let's refine the Name construction
+                # Valid full name = Base Number + (Space + Suffix if Suffix is NOT formula)
+                
+                # Re-evaluating Suffix for Name
+                suffix_text = raw_formula_chunk.strip()
+                is_suffix_formula = "x" in suffix_text.lower() or "х" in suffix_text.lower()
+                
+                full_position_name = base_num
+                
+                if suffix_text and not is_suffix_formula:
+                    # Append suffix to name
+                    full_position_name = f"{base_num} {suffix_text}"
+                
+                # Cleanup double spaces
+                position_num = re.sub(r"\s+", " ", full_position_name).strip()
                 
                 # Extract Thickness
                 # Check formula chunk first, then post-context
