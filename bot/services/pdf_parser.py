@@ -119,7 +119,16 @@ class PDFParser:
                 # Normalize formula (take suffix after last space)
                 # "82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И" -> "4ИxН14x4М1xН14x4И"
                 if " " in raw_formula_no_thick:
-                    position_formula = raw_formula_no_thick.split(" ")[-1]
+                    # Split by space
+                    parts = raw_formula_no_thick.split(" ")
+                    position_formula = parts[-1] # Default fallback
+                    
+                    # Look for the last part that contains 'x' or 'х' (Cyrillic)
+                    # This handles cases like "Formula (40" where "(40" is not the formula
+                    for part in reversed(parts):
+                        if "x" in part.lower() or "х" in part.lower():
+                            position_formula = part
+                            break
                 else:
                     position_formula = raw_formula_no_thick
 
