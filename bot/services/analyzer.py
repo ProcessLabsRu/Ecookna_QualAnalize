@@ -217,12 +217,13 @@ class Analyzer:
                  msg = "Обнаружено несоответствие:\n"
                  msg += "\n".join([f"❌ {d}" for d in details]) + "\n"
                  
-                 msg += f"\nФормула из заказа: {actual_thicknesses}"
-                 msg += f"\nФормула по таблице слипаемости: {primary_opt}"
+                 msg += f"\nФормула из заказа: {actual_thicknesses}\n"
                  
                  if len(valid_options) > 1:
-                     others = ", ".join([str(o) for o in valid_options[1:]])
-                     msg += f" (или: {others})"
+                     for i, opt in enumerate(valid_options, 1):
+                         msg += f"Формула по таблице слипаемости {i}: {opt}\n"
+                 else:
+                     msg += f"Формула по таблице слипаемости: {valid_options[0]}"
 
                  errors.append(msg)
 
@@ -230,8 +231,13 @@ class Analyzer:
 
     def _parse_rule_string(self, rule_str: str) -> List[int]:
         """
-        Parses a rule string like '4/12/4/12/4', '4-12-4', '4 12 4' into [4,12,4].
+        Parses a rule string like '4/12/4/12/4', '4-12-4', '4 12 4', '4x12x4' into [4,12,4].
         """
-        # Finds all consecutive digit sequences
-        parts = re.findall(r"\d+", rule_str)
-        return [int(p) for p in parts]
+        if not rule_str:
+            return []
+        
+        # Split by non-digit characters that are common separators: / - x х (cyrillic) , space
+        # We include comma here too to handle the case where it was already a comma-list in the DB
+        # or if it was partially parsed.
+        parts = re.split(r"[/xх\-\s,]+", rule_str)
+        return [int(p) for p in parts if p.isdigit()]
