@@ -56,6 +56,7 @@ async def process_pdf(bot: Bot, message: types.Message, file_id: str, file_name:
         
         analyzer = Analyzer(session)
         await analyzer.load_films()
+        await analyzer.load_articles()
         
         # Determine Report Data
         report_lines = []

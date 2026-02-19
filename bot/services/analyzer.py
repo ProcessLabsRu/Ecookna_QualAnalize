@@ -4,6 +4,8 @@ from typing import List, Optional, Tuple
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from bot.database.models import Film, SizeControl, QualPos, QualIssue
+from bot.config import settings
+from bot.services.directus import DirectusClient
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +13,8 @@ class Analyzer:
     def __init__(self, session: AsyncSession):
         self.session = session
         self._films_cache: List[str] = []
+        self._articles_cache: dict = {}
+        self.directus = DirectusClient(base_url=settings.DIRECTUS_URL, token=settings.DIRECTUS_TOKEN, verify_ssl=False)
 
     async def load_films(self):
         """Loads films from DB to cache."""
@@ -19,10 +23,29 @@ class Analyzer:
         self._films_cache = [row[0].strip() for row in result.all()]
         logger.info(f"Loaded {len(self._films_cache)} films from DB.")
 
-    def get_thickness(self, p: str) -> int:
-        """Extracts thickness from article string (first number found)."""
+    async def load_articles(self):
+        """Loads articles from Directus to cache."""
+        try:
+            response = await self.directus.get_items("art_rules", params={"limit": -1})
+            data = response.get("data", [])
+            for item in data:
+                if item.get("glass_article"):
+                    # Cache by article name
+                    self._articles_cache[item["glass_article"].strip()] = item
+            logger.info(f"Loaded {len(self._articles_cache)} articles from Directus.")
+        except Exception as e:
+            logger.error(f"Failed to load articles from Directus: {e}")
+
+    def get_thickness(self, p: str) -> Tuple[int, bool]:
+        """Extracts thickness and determines if it's a triplex from article string."""
+        # For triplex, e.g. 3.3.1, sum first two digits
+        triplex_match = re.search(r"(\d+)\.(\d+)\.\d+", p)
+        if triplex_match:
+            return int(triplex_match.group(1)) + int(triplex_match.group(2)), True
+            
+        # Standard thickness extraction
         match = re.search(r"(\d+)", p)
-        return int(match.group(1)) if match else 0
+        return (int(match.group(1)), False) if match else (0, False)
 
     def parse_formula(self, formula: str, is_outside: bool) -> List[dict]:
         """
@@ -53,12 +76,20 @@ class Analyzer:
             is_frame = re.match(r"^[HWНШ]", article, re.IGNORECASE)
             etype = "frame" if is_frame else "glass"
             
-            thickness = self.get_thickness(article)
+            thickness, is_triplex = self.get_thickness(article)
+            
+            is_tempered = False
+            if etype == "glass" and article in self._articles_cache:
+                processing = self._articles_cache[article].get("type_of_processing", "")
+                if processing and processing.lower() == "закаленное":
+                    is_tempered = True
             
             elements.append({
                 "article": article,
                 "type": etype,
-                "thickness": thickness
+                "thickness": thickness,
+                "is_triplex": is_triplex,
+                "is_tempered": is_tempered
             })
         
         # If is_outside, reverse the elements order
@@ -108,9 +139,8 @@ class Analyzer:
         w_round = self._round_size(width)
         h_round = self._round_size(height)
         
-        # 1. Extract extraction thicknesses
-        actual_thicknesses = [e["thickness"] for e in formula_elements]
-        if not actual_thicknesses:
+        # 1. Provide formula elements
+        if not formula_elements:
             return ["Пустая формула"]
 
         # 2. Calculate Cam Count
@@ -167,9 +197,36 @@ class Analyzer:
         
         match_found = False
         for opt in valid_options:
-            if len(actual_thicknesses) == len(opt):
-                # Check if ALL elements are >= required (Pass condition)
-                if all(act >= exp for act, exp in zip(actual_thicknesses, opt)):
+            if len(formula_elements) == len(opt):
+                option_passes = True
+                for act_el, exp_el in zip(formula_elements, opt):
+                    act_thick = act_el["thickness"]
+                    act_trip = act_el.get("is_triplex", False)
+                    act_temp = act_el.get("is_tempered", False)
+                    exp_thick = exp_el["thickness"]
+                    exp_temp = exp_el["is_tempered"]
+                    
+                    # Spacer frames matching logic
+                    if act_el["type"] == "frame":
+                        if act_thick < exp_thick:
+                            option_passes = False
+                            break
+                        continue
+
+                    # Glass and Triplex matching logic
+                    if act_trip:
+                        if act_thick < exp_thick + 2:
+                            option_passes = False
+                            break
+                        if exp_temp:
+                            option_passes = False
+                            break
+                    else:
+                        if act_thick < exp_thick:
+                            option_passes = False
+                            break
+                        
+                if option_passes:
                     match_found = True
                     break
         
@@ -180,16 +237,41 @@ class Analyzer:
              
              details = []
              # Check lengths first
-             limit = min(len(actual_thicknesses), len(primary_opt))
+             limit = min(len(formula_elements), len(primary_opt))
              
              for i in range(limit):
-                 act = actual_thicknesses[i]
-                 exp = primary_opt[i]
+                 act_el = formula_elements[i]
+                 exp_el = primary_opt[i]
                  
-                 # Error only if strictly LESS than required
-                 if act < exp:
+                 act = act_el["thickness"]
+                 act_trip = act_el.get("is_triplex", False)
+                 exp = exp_el["thickness"]
+                 exp_temp = exp_el["is_tempered"]
+                 
+                 # Error condition:
+                 is_error = False
+                 reason = ""
+                 
+                 if act_el["type"] == "frame":
+                     if act < exp:
+                         is_error = True
+                         reason = f"{act} мм (в заказе) < {exp} мм (норма)"
+                 else:
+                     if act_trip:
+                         if act < exp + 2:
+                             is_error = True
+                             reason = f"{act} мм (в заказе) < {exp} мм + 2 мм (норма)"
+                         elif exp_temp:
+                             is_error = True
+                             reason = "триплексом нельзя заменять закаленное стекло"
+                     else:
+                         if act < exp:
+                             is_error = True
+                             reason = f"{act} мм (в заказе) < {exp} мм (норма)"
+                 
+                 if is_error:
                      # Determine element name
-                     el_type = formula_elements[i]['type']
+                     el_type = act_el['type']
                      # Count index of this type
                      cnt = sum(1 for x in formula_elements[:i+1] if x['type'] == el_type)
                      
@@ -204,7 +286,10 @@ class Analyzer:
                          if cnt == 3: suffix = "-я" 
                          name_str = f"{cnt}{suffix} {type_name}"
                      
-                     details.append(f"{name_str}: {act} мм (в заказе) < {exp} мм (норма)")
+                     if act_trip:
+                         details.append(f"{name_str} (триплекс): {reason}")
+                     else:
+                         details.append(f"{name_str}: {reason}")
              
              # If details is empty but match_found is False, it implies logic error or length mismatch?
              # Or maybe it failed against primary_opt but passed against another? No, we checked all.
@@ -217,21 +302,24 @@ class Analyzer:
                  msg = "Обнаружено несоответствие:\n"
                  msg += "\n".join([f"❌ {d}" for d in details]) + "\n"
                  
-                 msg += f"\nФормула из заказа: {actual_thicknesses}\n"
+                 msg += f"\nФормула из заказа: {[e['thickness'] for e in formula_elements]}\n"
                  
+                 def format_opt(opt_list):
+                     return "/".join(f"{el['thickness']}{'Зак' if el['is_tempered'] else ''}" for el in opt_list)
+
                  if len(valid_options) > 1:
                      for i, opt in enumerate(valid_options, 1):
-                         msg += f"Формула по таблице слипаемости {i}: {opt}\n"
+                         msg += f"Формула по таблице слипаемости {i}: {format_opt(opt)}\n"
                  else:
-                     msg += f"Формула по таблице слипаемости: {valid_options[0]}"
+                     msg += f"Формула по таблице слипаемости: {format_opt(valid_options[0])}"
 
                  errors.append(msg)
 
         return errors
 
-    def _parse_rule_string(self, rule_str: str) -> List[int]:
+    def _parse_rule_string(self, rule_str: str) -> List[dict]:
         """
-        Parses a rule string like '4/12/4/12/4', '4-12-4', '4 12 4', '4x12x4' into [4,12,4].
+        Parses a rule string like '4/12/4/12/4', '4-12-4Зак', '4 12 4', '4x12x4' into [{'thickness': 4, 'is_tempered': False}, ...].
         """
         if not rule_str:
             return []
@@ -240,4 +328,11 @@ class Analyzer:
         # We include comma here too to handle the case where it was already a comma-list in the DB
         # or if it was partially parsed.
         parts = re.split(r"[/xх\-\s,]+", rule_str)
-        return [int(p) for p in parts if p.isdigit()]
+        result = []
+        for p in parts:
+            match = re.search(r"(\d+)", p)
+            if match:
+                thickness = int(match.group(1))
+                is_tempered = bool(re.search(r"зак|zak", p, re.IGNORECASE))
+                result.append({"thickness": thickness, "is_tempered": is_tempered})
+        return result

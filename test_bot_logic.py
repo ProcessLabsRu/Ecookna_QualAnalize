@@ -31,6 +31,7 @@ async def run_test():
     async with async_session() as session:
         analyzer = Analyzer(session)
         await analyzer.load_films()
+        await analyzer.load_articles()
         
         for item in items:
             print(f"--- Position {item['position_num']} ---")

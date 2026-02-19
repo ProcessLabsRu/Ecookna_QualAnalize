@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     BOT_TOKEN: str
     DB_DSN: PostgresDsn
     
+    # Directus settings
+    DIRECTUS_URL: str
+    DIRECTUS_TOKEN: str
+    
     # Optional: Log level
     LOG_LEVEL: str = "INFO"
 
