@@ -112,5 +112,13 @@ async def test_triplex_logic():
     assert elements_custom[0]["is_triplex"] == True, "Should be flagged as triplex"
     print("Test 7 Passed!")
 
+    print("Test 8: parse_formula (Multiple film triplex 4LHSolarxKngEVA0,38xKngEVA0,38x4М1xН12x4М1)")
+    # Should merge 4LHSolar and 4М1 into a single triplex element with thickness 8
+    elements_multi = analyzer.parse_formula("4LHSolarxKngEVA0,38xKngEVA0,38x4М1xН12x4М1", is_outside=False)
+    assert len(elements_multi) == 3, f"Expected 3 elements (merged_triplex, spacer, glass), got {len(elements_multi)}"
+    assert elements_multi[0]["thickness"] == 8, "Thickness should be 4 + 4 = 8"
+    assert elements_multi[0]["is_triplex"] == True, "Should be flagged as triplex"
+    print("Test 8 Passed!")
+
 if __name__ == "__main__":
     asyncio.run(test_triplex_logic())
