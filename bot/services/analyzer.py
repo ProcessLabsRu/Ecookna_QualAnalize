@@ -326,10 +326,10 @@ class Analyzer:
                  msg = "Обнаружено несоответствие:\n"
                  msg += "\n".join([f"❌ {d}" for d in details]) + "\n"
                  
-                 msg += f"\nФормула из заказа: {[e['thickness'] for e in formula_elements]}\n"
+                 msg += f"\nФормула из заказа: {[str(e['thickness']) + ('з' if e.get('is_tempered') else '') for e in formula_elements]}\n"
                  
                  def format_opt(opt_list):
-                     return "/".join(f"{el['thickness']}{'Зак' if el['is_tempered'] else ''}" for el in opt_list)
+                     return "/".join(f"{el['thickness']}{'з' if el['is_tempered'] else ''}" for el in opt_list)
 
                  if len(valid_options) > 1:
                      for i, opt in enumerate(valid_options, 1):
