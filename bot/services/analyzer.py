@@ -17,14 +17,20 @@ class Analyzer:
         self.directus = DirectusClient(base_url=settings.DIRECTUS_URL, token=settings.DIRECTUS_TOKEN, verify_ssl=False)
 
     async def load_films(self):
-        """Loads films from DB to cache dict."""
-        stmt = select(Film.films_article, Film.type_of_film).where(Film.films_article.isnot(None))
-        result = await self.session.execute(stmt)
-        for row in result.all():
-            article = row[0].strip()
-            film_type = row[1].strip() if row[1] else ""
-            self._films_cache[article] = film_type
-        logger.info(f"Loaded {len(self._films_cache)} films from DB.")
+        """Loads films from Directus to cache dict."""
+        try:
+            response = await self.directus.get_items("films", params={"limit": -1})
+            data = response.get("data", [])
+            for item in data:
+                if item.get("films_article"):
+                    article = item["films_article"].strip()
+                    film_type = item.get("type_of_film", "")
+                    if not film_type:
+                        film_type = item.get("films_type", "")
+                    self._films_cache[article] = film_type
+            logger.info(f"Loaded {len(self._films_cache)} films from Directus.")
+        except Exception as e:
+            logger.error(f"Failed to load films from Directus: {e}")
 
     async def load_articles(self):
         """Loads articles from Directus to cache."""
@@ -70,10 +76,11 @@ class Analyzer:
                 continue
 
             # Filter Films
-            # We assume self._films_cache is populated.
-            if article in self._films_cache:
-                film_type = self._films_cache.get(article, "")
-                if film_type.lower() == "для триплекса":
+            # Normalize article for film check (remove spaces for cases like "СМАР Т")
+            article_norm = article.replace(" ", "")
+            if article in self._films_cache or article_norm in self._films_cache:
+                film_type = self._films_cache.get(article) or self._films_cache.get(article_norm)
+                if film_type and film_type.lower() == "для триплекса":
                     pending_triplex_film = True
                 continue
 
@@ -86,10 +93,16 @@ class Analyzer:
             thickness, is_triplex = self.get_thickness(article)
             
             is_tempered = False
-            if etype == "glass" and article in self._articles_cache:
-                processing = self._articles_cache[article].get("type_of_processing", "")
-                if processing and processing.lower() == "закаленное":
+            if etype == "glass":
+                # Проверка на маркеры закалки в строке
+                if re.search(r"зак|з|zak|z", article, re.IGNORECASE):
                     is_tempered = True
+                
+                # Проверка в кэше статей (существующая логика)
+                if not is_tempered and article in self._articles_cache:
+                    processing = self._articles_cache[article].get("type_of_processing", "")
+                    if processing and processing.lower() == "закаленное":
+                        is_tempered = True
             
             new_element = {
                 "article": article,
@@ -326,7 +339,7 @@ class Analyzer:
                  msg = "Обнаружено несоответствие:\n"
                  msg += "\n".join([f"❌ {d}" for d in details]) + "\n"
                  
-                 msg += f"\nФормула из заказа: {[str(e['thickness']) + ('з' if e.get('is_tempered') else '') for e in formula_elements]}\n"
+                 msg += f"\nФормула из заказа: {[str(e['thickness']) + ('зак' if e.get('is_tempered') else '') for e in formula_elements]}\n"
                  
                  def format_opt(opt_list):
                      return "/".join(f"{el['thickness']}{'з' if el['is_tempered'] else ''}" for el in opt_list)
@@ -357,6 +370,6 @@ class Analyzer:
             match = re.search(r"(\d+)", p)
             if match:
                 thickness = int(match.group(1))
-                is_tempered = bool(re.search(r"зак|zak", p, re.IGNORECASE))
+                is_tempered = bool(re.search(r"зак|з|zak|z", p, re.IGNORECASE))
                 result.append({"thickness": thickness, "is_tempered": is_tempered})
         return result

@@ -176,24 +176,46 @@ class PDFParser:
                     raw_formula_clean.upper().endswith("FS") 
                 )
 
-                # Normalize formula (take suffix after last space)
-                # "82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И" -> "4ИxН14x4М1xН14x4И"
+                # Normalize formula
+                # 82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И -> 4ИxН14x4М1xН14x4И
                 # Remove thickness from formula chunk if present
                 raw_formula_no_thick = PDFParser.THICK_RE.sub("", raw_formula_clean).strip()
 
+                # NEW LOGIC: Look for formula start in chunk and continuation in post_context
+                # Formula usually contains 'x' or 'х'
                 if " " in raw_formula_no_thick:
-                    # Split by space
                     parts = raw_formula_no_thick.split(" ")
-                    position_formula = parts[-1] # Default fallback
-                    
-                    # Look for the last part that contains 'x' or 'х' (Cyrillic)
-                    # This handles cases like "Formula (40" where "(40" is not the formula
-                    for part in reversed(parts):
+                    # If the last part doesn't have 'x', but some previous part does, 
+                    # we might be looking at "Name Formula Name" or "Formula Part1 Part2"
+                    # But often it is "Name Formula" or "Formula"
+                    # Let's try to find the first part that looks like formula and take everything from there
+                    formula_start_idx = -1
+                    for idx, part in enumerate(parts):
                         if "x" in part.lower() or "х" in part.lower():
-                            position_formula = part
+                            formula_start_idx = idx
                             break
+                    
+                    if formula_start_idx != -1:
+                        position_formula = "".join(parts[formula_start_idx:])
+                    else:
+                        position_formula = parts[-1] 
                 else:
                     position_formula = raw_formula_no_thick
+
+                # Check post_context for continuation (e.g. if formula was split by dimensions)
+                # If post_context has 'x' or 'х' and it's near the beginning (first few words)
+                post_parts = post_context.strip().split()
+                if post_parts:
+                    # Look for formula continuation in first 3 words of post_context
+                    for i in range(min(3, len(post_parts))):
+                        if "x" in post_parts[i].lower() or "х" in post_parts[i].lower():
+                            # Append to position_formula, removing thickness markers
+                            cont = PDFParser.THICK_RE.sub("", post_parts[i]).strip()
+                            position_formula += cont
+                            break
+                
+                # Final cleanup of spaces in formula
+                position_formula = position_formula.replace(" ", "")
                 
                 logger.info(f"Item {position_num}: RawSource='{raw_formula_clean}', Parsed='{position_formula}', IsOutside={is_outside}")
 
