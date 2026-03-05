@@ -120,5 +120,19 @@ async def test_triplex_logic():
     assert elements_multi[0]["is_triplex"] == True, "Should be flagged as triplex"
     print("Test 8 Passed!")
 
+    print("Test 9: check_slip (Raw glasses vs tempered rule like 00-134-1119)")
+    mock_rule.formula_1_1k = None
+    mock_rule.formula_2_1k = None
+    mock_rule.formula_1_2k = "6з/16/6з/14/6з"
+    mock_rule.formula_2_2k = None
+    elements_temper = analyzer.parse_formula("6М1xH12x6М1xH10x6М1", is_outside=False)
+    errors = await analyzer.check_slip(1702, 2302, elements_temper)
+    assert len(errors) == 1, f"Expected 1 aggregated error block, got {errors}"
+    err_text = errors[0]
+    assert "1-е стекло" in err_text and "2-е стекло" in err_text and "3-е стекло" in err_text, "Should flag all three glasses"
+    assert "требуется закалка" in err_text, "Should mention missing tempering"
+    assert "1-я рамка" in err_text and "2-я рамка" in err_text, "Should keep frame thickness mismatches"
+    print("Test 9 Passed!")
+
 if __name__ == "__main__":
     asyncio.run(test_triplex_logic())

@@ -256,10 +256,18 @@ class Analyzer:
                             option_passes = False
                             break
                         if exp_temp:
+                            # If rule explicitly requires tempered glass, but we have triplex
+                            # Current logic says triplex can't replace tempered? 
+                            # Let's check the condition again: if exp_temp: option_passes = False
+                            # This means if rule asks for '4з' we can't use '3.3.1'.
                             option_passes = False
                             break
                     else:
                         if act_thick < exp_thick:
+                            option_passes = False
+                            break
+                        if exp_temp and not act_temp:
+                            # Rule requires tempered, but order has raw (or generic) glass
                             option_passes = False
                             break
                         
@@ -282,31 +290,32 @@ class Analyzer:
                  
                  act = act_el["thickness"]
                  act_trip = act_el.get("is_triplex", False)
+                 act_temp = act_el.get("is_tempered", False)
                  exp = exp_el["thickness"]
                  exp_temp = exp_el["is_tempered"]
                  
-                 # Error condition:
-                 is_error = False
-                 reason = ""
+                 reasons = []
                  
                  if act_el["type"] == "frame":
                      if act < exp:
-                         is_error = True
-                         reason = f"{act} мм (в заказе) < {exp} мм (норма)"
+                         reasons.append(f"{act} мм (в заказе) < {exp} мм (норма)")
                  else:
                      if act_trip:
                          if act < exp + 2:
-                             is_error = True
-                             reason = f"{act} мм (в заказе) < {exp} мм + 2 мм (норма)"
-                         elif exp_temp:
-                             is_error = True
-                             reason = "триплексом нельзя заменять закаленное стекло"
+                             reasons.append(f"{act} мм (в заказе) < {exp} мм + 2 мм (норма)")
+                         if exp_temp:
+                             reasons.append("триплексом нельзя заменять закаленное стекло")
                      else:
                          if act < exp:
-                             is_error = True
-                             reason = f"{act} мм (в заказе) < {exp} мм (норма)"
+                             reasons.append(f"{act} мм (в заказе) < {exp} мм (норма)")
+                         if exp_temp and not act_temp:
+                             reasons.append("требуется закалка")
                  
-                 if is_error:
+                 if reasons:
+                     if len(reasons) > 1:
+                         reason = f"{reasons[0]}; дополнительно: {'; '.join(reasons[1:])}"
+                     else:
+                         reason = reasons[0]
                      # Determine element name
                      el_type = act_el['type']
                      # Count index of this type
@@ -356,20 +365,18 @@ class Analyzer:
 
     def _parse_rule_string(self, rule_str: str) -> List[dict]:
         """
-        Parses a rule string like '4/12/4/12/4', '4-12-4Зак', '4 12 4', '4x12x4' into [{'thickness': 4, 'is_tempered': False}, ...].
+        Parses rule strings like '4/12/4', '6з/16/6з/14/6з', '6 з 16 6з', '6 ESG-16-6zak'
+        into ordered dicts with tempered flag.
         """
         if not rule_str:
             return []
-        
-        # Split by non-digit characters that are common separators: / - x х (cyrillic) , space
-        # We include comma here too to handle the case where it was already a comma-list in the DB
-        # or if it was partially parsed.
-        parts = re.split(r"[/xх\-\s,]+", rule_str)
+
+        pattern = re.compile(r"(\d+)\s*(зак|з|zak|z|esg|tempered)?", re.IGNORECASE)
         result = []
-        for p in parts:
-            match = re.search(r"(\d+)", p)
-            if match:
-                thickness = int(match.group(1))
-                is_tempered = bool(re.search(r"зак|з|zak|z", p, re.IGNORECASE))
-                result.append({"thickness": thickness, "is_tempered": is_tempered})
+
+        for m in pattern.finditer(rule_str):
+            thickness = int(m.group(1))
+            is_tempered = bool(m.group(2))
+            result.append({"thickness": thickness, "is_tempered": is_tempered})
+
         return result
