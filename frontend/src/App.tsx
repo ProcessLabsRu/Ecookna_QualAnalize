@@ -286,12 +286,9 @@ export default function App() {
             <CardHeader className="min-h-40 gap-3 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
-                  <Badge className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
-                    Быстрый поиск
-                  </Badge>
-                  <CardTitle className="text-2xl">Подбор формулы из таблицы слипания</CardTitle>
+                  <CardTitle className="text-2xl">Подбор формулы</CardTitle>
                   <CardDescription className="max-w-2xl text-sm leading-6">
-                    Введите ширину и высоту, чтобы получить допустимые формулы из таблицы.
+                    Укажите размеры для проверки
                   </CardDescription>
                 </div>
                 <div className="hidden rounded-3xl border border-white/80 bg-white/70 p-3 text-primary shadow-sm sm:block">
@@ -362,9 +359,6 @@ export default function App() {
             <CardHeader className="min-h-40 gap-3 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
-              <Badge variant="secondary" className="w-fit rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]">
-                Анализ PDF
-              </Badge>
                   <CardTitle className="text-2xl">Проверка заказа</CardTitle>
                   <CardDescription className="leading-6">
                     Загрузите PDF из StartОкна. Нужная форма отчета находится в меню{" "}
@@ -448,12 +442,6 @@ export default function App() {
             <CardHeader className="gap-4 border-b border-border/70">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <Badge
-                    variant="outline"
-                    className="rounded-full px-3 py-1 text-[11px] uppercase tracking-[0.18em]"
-                  >
-                    Общий результат
-                  </Badge>
                   {activeResult === "search" ? (
                     <Badge
                       variant={searchError || searchResult?.status === "not_found" ? "secondary" : "default"}
@@ -488,9 +476,6 @@ export default function App() {
                 </Button>
               </div>
               <CardTitle className="text-2xl">Результат проверок</CardTitle>
-              <CardDescription className="leading-6">
-                Все результаты выводятся в одном текстовом блоке. Его удобно целиком выделить и скопировать.
-              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-6">
               {resultText ? (
