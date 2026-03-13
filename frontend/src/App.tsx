@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import ecooknaGroupLogo from "@/assets/ecookna-group.svg"
+import heroQaIllustration from "@/assets/hero-qa.svg"
 
 type SlipLookupResponse = {
   status: "success" | "not_found"
@@ -502,7 +504,7 @@ export default function App() {
           <div className="grid gap-6 px-5 py-5 lg:grid-cols-[240px_minmax(0,1fr)_220px] lg:items-center lg:gap-8 lg:px-7">
             <div className="overflow-hidden rounded-[24px] border border-border/70 bg-muted/30">
               <img
-                src="/hero-qa.svg"
+                src={heroQaIllustration}
                 alt="Иллюстрация проверки заказа"
                 className="h-[160px] w-full object-cover lg:h-[190px]"
               />
@@ -516,7 +518,7 @@ export default function App() {
 
             <div className="flex items-center justify-center lg:justify-end">
               <img
-                src="/ecookna-group.svg"
+                src={ecooknaGroupLogo}
                 alt="ECOOKNA GROUP"
                 className="h-auto w-[220px] max-w-full"
               />
