@@ -179,7 +179,7 @@ function SearchResultView({
   const statusTitle = result.status === "success" ? "Формулы найдены" : "Правило не найдено"
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Alert className={`rounded-2xl ${statusTone}`}>
         {statusIcon}
         <AlertTitle>{statusTitle}</AlertTitle>
@@ -191,36 +191,36 @@ function SearchResultView({
       </Alert>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-3">
           <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Размер</div>
-          <div className="mt-2 text-lg font-semibold">{result.width}×{result.height}</div>
+          <div className="mt-1.5 text-lg font-semibold">{result.width}×{result.height}</div>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-3">
           <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Округление</div>
-          <div className="mt-2 text-lg font-semibold">{result.width_round}×{result.height_round}</div>
+          <div className="mt-1.5 text-lg font-semibold">{result.width_round}×{result.height_round}</div>
         </div>
       </div>
 
       {result.marking ? (
-        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-3">
           <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Маркировка</div>
-          <div className="mt-2 text-base font-medium">{result.marking}</div>
+          <div className="mt-1.5 text-base font-medium">{result.marking}</div>
         </div>
       ) : null}
 
       {result.status === "success" ? (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {formulaGroups
             .filter(({ key }) => (result.formulas[key] || []).length > 0)
             .map(({ key, title }) => (
-              <div key={key} className="rounded-2xl border border-border/70 bg-white/90 p-4">
-                <div className="mb-3 flex items-center gap-2">
+              <div key={key} className="rounded-2xl border border-border/70 bg-white/90 p-3">
+                <div className="mb-2.5 flex items-center gap-2">
                   <Info className="size-4 text-primary" />
                   <h3 className="text-sm font-semibold">{title}</h3>
                 </div>
-                <ul className="space-y-2">
+                <ul className="space-y-1.5">
                   {result.formulas[key].map((formula) => (
-                    <li key={formula} className="flex items-start gap-3 rounded-xl bg-secondary/35 px-3 py-2">
+                    <li key={formula} className="flex items-start gap-3 rounded-xl bg-secondary/35 px-3 py-1.5">
                       <span className="mt-1 size-2 rounded-full bg-primary" />
                       <span className="font-mono text-sm">{formula}</span>
                     </li>
@@ -259,7 +259,7 @@ function PdfResultView({
   const isWarning = result.status === "warning"
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Alert
         className={cn(
           "rounded-2xl",
@@ -290,22 +290,22 @@ function PdfResultView({
       </Alert>
 
       <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-3">
           <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Файл</div>
-          <div className="mt-2 text-base font-semibold break-all">{result.file_name}</div>
+          <div className="mt-1.5 text-base font-semibold break-all">{result.file_name}</div>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-3">
           <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Позиции / проблемы</div>
-          <div className="mt-2 text-base font-semibold">
+          <div className="mt-1.5 text-base font-semibold">
             {result.total_items} / {result.issues_count}
           </div>
         </div>
       </div>
 
       {result.report_data.length > 0 ? (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {result.report_data.map((item) => (
-            <div key={`${item.pos_num}-${item.size}`} className="rounded-2xl border border-border/70 bg-white/90 p-4">
+            <div key={`${item.pos_num}-${item.size}`} className="rounded-2xl border border-border/70 bg-white/90 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-base font-semibold">Позиция №{item.pos_num}</div>
@@ -313,14 +313,14 @@ function PdfResultView({
                 </div>
                 <TriangleAlert className="size-4 text-destructive" />
               </div>
-              <div className="mt-3 space-y-1 text-sm">
+              <div className="mt-2.5 space-y-1 text-sm">
                 <div><span className="font-medium">Формула:</span> {item.formula}</div>
                 <div><span className="font-medium">Открывание:</span> {item.is_outside ? "Наружу (формула перевернута)" : "Внутрь"}</div>
                 <div><span className="font-medium">Раскладка:</span> {item.raskl || "Нет"}</div>
               </div>
-              <ul className="mt-3 space-y-2">
+              <ul className="mt-2.5 space-y-1.5">
                 {item.errors.map((issue) => (
-                  <li key={issue} className="flex items-start gap-3 rounded-xl bg-destructive/5 px-3 py-2 text-sm">
+                  <li key={issue} className="flex items-start gap-3 rounded-xl bg-destructive/5 px-3 py-1.5 text-sm">
                     <span className="mt-1 size-2 rounded-full bg-destructive" />
                     <span>{issue}</span>
                   </li>
@@ -652,16 +652,17 @@ export default function App() {
 
       <Dialog open={resultDialogOpen} onOpenChange={setResultDialogOpen}>
         <DialogContent className="max-w-4xl rounded-[28px] border-border/70 bg-background/98 p-0 shadow-2xl">
-          <DialogHeader className="border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.92))] px-6 py-5 pr-24 text-left">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-2">
+          <DialogHeader className="border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.92))] px-6 py-5 text-left">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 space-y-2">
                 <DialogTitle className="text-3xl font-semibold tracking-tight">
                   Результат проверок
                 </DialogTitle>
-                <div className="flex min-h-6 flex-wrap items-center gap-3">
+                <div className="flex min-h-11 items-center gap-3">
                   {activeResult === "search" ? (
                     <Badge
                       variant={searchError || searchResult?.status === "not_found" ? "secondary" : "default"}
+                      className="h-11 rounded-xl px-4 text-base"
                     >
                       Подбор формулы
                     </Badge>
@@ -673,6 +674,7 @@ export default function App() {
                           ? "secondary"
                           : "default"
                       }
+                      className="h-11 rounded-xl px-4 text-base"
                     >
                       Проверка PDF
                     </Badge>
@@ -681,7 +683,7 @@ export default function App() {
               </div>
               <Button
                 variant="outline"
-                className="rounded-xl"
+                className="h-11 rounded-xl px-5 text-base"
                 onClick={() => void copyCombinedResult()}
                 disabled={!resultText}
               >
@@ -698,10 +700,10 @@ export default function App() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[75vh] overflow-auto p-5">
+          <div className="max-h-[75vh] overflow-auto p-4">
             {resultText ? (
-              <div className="rounded-[24px] border border-border/70 bg-secondary/25 p-3">
-                <div className="rounded-[18px] border border-border/70 bg-white/90 p-4">
+              <div className="rounded-[24px] border border-border/70 bg-secondary/25 p-2.5">
+                <div className="rounded-[18px] border border-border/70 bg-white/90 p-3.5">
                   {activeResult === "search" ? (
                     <SearchResultView result={searchResult} error={searchError} />
                   ) : (
