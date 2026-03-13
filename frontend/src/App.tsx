@@ -499,19 +499,27 @@ export default function App() {
     <main className="min-h-screen px-4 py-4 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-4">
         <header className="overflow-hidden rounded-[28px] border border-border/60 bg-card/90 shadow-sm backdrop-blur">
-          <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-primary px-3 py-2 text-sm font-semibold tracking-[0.18em] text-primary-foreground">
-                  ЭКООКНА
-                </div>
-                <Badge variant="outline" className="rounded-full px-3 py-1 text-xs uppercase tracking-[0.16em]">
-                  Контроль качества
-                </Badge>
-              </div>
-              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <div className="grid gap-6 px-5 py-5 lg:grid-cols-[240px_minmax(0,1fr)_220px] lg:items-center lg:gap-8 lg:px-7">
+            <div className="overflow-hidden rounded-[24px] border border-border/70 bg-muted/30">
+              <img
+                src="/hero-qa.svg"
+                alt="Иллюстрация проверки заказа"
+                className="h-[160px] w-full object-cover lg:h-[190px]"
+              />
+            </div>
+
+            <div className="flex min-w-0 items-center justify-center">
+              <h1 className="text-center text-[2rem] font-semibold tracking-tight sm:text-[2.35rem] lg:text-[2.7rem]">
                 Подбор формул и проверка заказов
               </h1>
+            </div>
+
+            <div className="flex items-center justify-center lg:justify-end">
+              <img
+                src="/ecookna-group.svg"
+                alt="ECOOKNA GROUP"
+                className="h-auto w-[220px] max-w-full"
+              />
             </div>
           </div>
         </header>

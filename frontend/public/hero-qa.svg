@@ -1,0 +1,61 @@
+<svg width="800" height="520" viewBox="0 0 800 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="800" height="520" fill="#F7F7F5"/>
+  <g opacity="0.5" stroke="#D8D8D8" stroke-width="2">
+    <path d="M24 60H196V216H24V60Z"/>
+    <path d="M24 60L196 216"/>
+    <path d="M106 60V216"/>
+    <path d="M544 66H756V258H544V66Z"/>
+    <path d="M596 66V258"/>
+    <path d="M24 324H784"/>
+    <path d="M510 278H742V456H510V278Z"/>
+  </g>
+  <g opacity="0.35" stroke="#CFCFCF">
+    <path d="M570 120C606 86 671 84 710 118"/>
+    <path d="M620 350C660 312 726 314 758 364"/>
+    <path d="M548 388C586 338 654 330 702 360"/>
+  </g>
+  <g>
+    <rect x="34" y="164" width="92" height="178" rx="12" fill="#FAFAFA" stroke="#CFCFCF" stroke-width="3"/>
+    <path d="M74 180L88 331" stroke="#C9C9C9" stroke-width="2"/>
+    <path d="M44 228H116" stroke="#D7D7D7" stroke-width="2"/>
+  </g>
+  <g>
+    <path d="M272 102C310 93 352 100 390 132C423 160 434 208 430 246L398 251L278 228L236 164C235 139 247 114 272 102Z" fill="#F3F3F3" stroke="#BFBFBF" stroke-width="3"/>
+    <path d="M307 102C325 114 336 132 342 156" stroke="#C7C7C7" stroke-width="2"/>
+    <path d="M338 106C358 120 371 141 377 166" stroke="#C7C7C7" stroke-width="2"/>
+    <path d="M372 116C389 130 401 149 406 171" stroke="#C7C7C7" stroke-width="2"/>
+    <path d="M301 172C327 162 357 169 378 190C391 204 398 221 399 238" stroke="#BDBDBD" stroke-width="3" stroke-linecap="round"/>
+    <path d="M304 201C326 216 353 220 381 214" stroke="#BDBDBD" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  <g>
+    <path d="M206 226C224 188 256 171 302 176L358 182C394 186 426 203 450 232L511 306C530 329 539 360 536 391L528 470H416L384 356L348 481H219L242 319L206 226Z" fill="#0A2CFF"/>
+    <path d="M289 208L324 210L315 334H282L289 208Z" fill="#FAFAFA"/>
+    <path d="M302 208L341 246L334 346H314L302 208Z" fill="#0321B6"/>
+    <path d="M342 232L319 268L294 233" fill="#0A2CFF"/>
+    <path d="M211 237C227 211 249 198 278 194" stroke="#1D3CFF" stroke-width="4"/>
+    <path d="M445 239C470 252 491 270 509 295" stroke="#1D3CFF" stroke-width="4"/>
+    <path d="M251 326L232 470" stroke="#0721B7" stroke-width="6"/>
+    <path d="M407 344L435 470" stroke="#0721B7" stroke-width="6"/>
+    <path d="M507 313L619 347" stroke="#C9C9C9" stroke-width="5"/>
+    <path d="M594 334L633 453" stroke="#D1D1D1" stroke-width="5"/>
+    <ellipse cx="222" cy="470" rx="28" ry="14" fill="#0721B7"/>
+    <ellipse cx="437" cy="470" rx="30" ry="14" fill="#0721B7"/>
+  </g>
+  <g>
+    <ellipse cx="469" cy="283" rx="44" ry="37" transform="rotate(-22 469 283)" fill="#F9F9F9" stroke="#BFBFBF" stroke-width="5"/>
+    <ellipse cx="469" cy="283" rx="31" ry="25" transform="rotate(-22 469 283)" fill="none" stroke="#C9C9C9" stroke-width="3"/>
+    <path d="M435 311L389 350" stroke="#B8B8B8" stroke-width="10" stroke-linecap="round"/>
+  </g>
+  <g opacity="0.8">
+    <path d="M88 410H280L315 495H70L88 410Z" fill="#FCFCFC" stroke="#CFCFCF" stroke-width="3"/>
+    <path d="M110 432H248" stroke="#DBDBDB" stroke-width="2"/>
+    <path d="M102 454H232" stroke="#DBDBDB" stroke-width="2"/>
+    <path d="M354 404H555L590 492H336L354 404Z" fill="#FCFCFC" stroke="#CFCFCF" stroke-width="3"/>
+    <path d="M379 430H529" stroke="#DBDBDB" stroke-width="2"/>
+    <path d="M364 456H512" stroke="#DBDBDB" stroke-width="2"/>
+  </g>
+  <g transform="translate(542 26)">
+    <text x="0" y="60" fill="#0050A6" font-family="Arial, sans-serif" font-size="84" font-weight="700">kaleva</text>
+    <text x="0" y="98" fill="#1F58A8" font-family="Arial, sans-serif" font-size="32" letter-spacing="1.2">инновационные окна</text>
+  </g>
+</svg>
