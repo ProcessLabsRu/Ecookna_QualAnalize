@@ -9,6 +9,8 @@ from bot.services.directus import DirectusClient
 
 logger = logging.getLogger(__name__)
 
+FORMULA_SPLIT_RE = re.compile(r"(?<=[0-9A-Za-zА-Яа-я.,])[xх](?=[0-9A-Za-zА-Яа-я])")
+
 class Analyzer:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -64,8 +66,8 @@ class Analyzer:
         if not formula:
             return []
         
-        # Split by 'x' or 'х' (Cyrillic)
-        raw_parts = re.split(r"[xх]", formula)
+        # Split only real formula separators, not incidental letters inside service text.
+        raw_parts = FORMULA_SPLIT_RE.split(formula)
         elements = []
         
         pending_triplex_film = False

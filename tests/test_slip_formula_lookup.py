@@ -12,6 +12,7 @@ os.environ.setdefault("DIRECTUS_URL", "http://localhost:8055")
 os.environ.setdefault("DIRECTUS_TOKEN", "test-token")
 
 from bot.services.analyzer import Analyzer
+from bot.services.pdf_parser import PDFParser
 from web.app import parse_size_input
 
 
@@ -85,3 +86,38 @@ async def test_get_slip_formulas_by_size_returns_not_found_payload():
         "marking": None,
         "formulas": {},
     }
+
+
+def test_pdf_parser_cleans_service_labels_and_glues_broken_formula():
+    text = """Заполнения 88-174-1017 от 06.02.2026
+Кол-
+Номер Формула Размер Площадь Масса
+во
+88-174-1017/11/5
+4ИxW14RAL7011Arx4М1xW14RAL7011Arx4L
+KLV-Standart:Вх.Дверь: 650x1896 1 1.23 39.99
+HSolar (40 мм)
+Вид СНАРУЖИ на себя
+Раскладка отсутствует
+Итого по изделию:
+Количество элементов - 1
+"""
+
+    items = PDFParser.parse_text(text)
+
+    assert len(items) == 1
+    assert items[0]["position_num"] == "88-174-1017/11/5"
+    assert items[0]["position_formula"] == "4ИxW14RAL7011Arx4М1xW14RAL7011Arx4LHSolar"
+    assert items[0]["is_oytside"] is True
+
+
+def test_analyzer_parse_formula_does_not_split_on_vh_in_service_text():
+    analyzer = Analyzer(session=None)
+
+    elements = analyzer.parse_formula(
+        "4ИxW14RAL7011Arx4М1xW14RAL7011Arx4LKLV-Standart:Вх.Дверь:",
+        is_outside=False,
+    )
+
+    assert [element["thickness"] for element in elements] == [4, 14, 4, 14, 4]
+    assert len(elements) == 5
