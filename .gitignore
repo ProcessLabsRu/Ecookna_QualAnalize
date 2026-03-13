@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 venv/
 .env
+frontend/node_modules/
 
 # OS
 .DS_Store

@@ -106,6 +106,120 @@
             margin-bottom: 25px;
         }
 
+        .search-card {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px;
+            background: linear-gradient(180deg, #fcfcfc 0%, #f7f7f7 100%);
+            margin-bottom: 28px;
+        }
+
+        .section-title {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .section-note {
+            margin: 0 0 18px 0;
+            text-align: center;
+            color: #666;
+        }
+
+        .search-form {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            min-width: 280px;
+        }
+
+        .field-group label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #444;
+        }
+
+        .text-input {
+            height: 48px;
+            border: 1px solid #cfcfcf;
+            border-radius: 6px;
+            padding: 0 14px;
+            font-size: 18px;
+            background: #fff;
+            color: #222;
+            box-sizing: border-box;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 168, 89, 0.12);
+        }
+
+        .search-result {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .search-summary {
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            background: #f1f8f4;
+            border: 1px solid #cfe7d8;
+            color: #205b38;
+            line-height: 1.5;
+        }
+
+        .search-summary.warning {
+            background: var(--warning-bg);
+            border-color: #ffe69c;
+            color: var(--warning-text);
+        }
+
+        .formula-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+        }
+
+        .formula-card {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 16px;
+        }
+
+        .formula-card h3 {
+            margin: 0 0 12px 0;
+            font-size: 16px;
+        }
+
+        .formula-list {
+            margin: 0;
+            padding-left: 18px;
+            color: #444;
+        }
+
+        .formula-list li + li {
+            margin-top: 8px;
+        }
+
+        .divider {
+            margin: 32px 0 24px 0;
+            border: 0;
+            border-top: 1px solid #ececec;
+        }
+
         .upload-area:hover {
             border-color: var(--primary-color);
             background-color: rgba(0, 168, 89, 0.03);
@@ -313,6 +427,14 @@
                 flex-direction: column;
                 gap: 10px;
             }
+
+            .field-group {
+                min-width: 100%;
+            }
+
+            .search-form .btn {
+                width: 100%;
+            }
         }
     </style>
 </head>
@@ -333,9 +455,25 @@
     </header>
 
     <div class="container">
-        <h1>Проверка заказа</h1>
-        <p class="subtitle">Загрузите PDF файл для автоматического анализа из StartОкна: Печать/Резерв/3.4 Заполнения
-        </p>
+        <section class="search-card">
+            <h1 class="section-title">Быстрый подбор формулы из таблицы слипания</h1>
+            <p class="section-note">Введите размер стеклопакета в формате <b>1520*2730</b>, чтобы получить все доступные формулы</p>
+
+            <div class="search-form">
+                <div class="field-group">
+                    <label for="sizeInput">Размер</label>
+                    <input class="text-input" type="text" id="sizeInput" placeholder="Например, 1520*2730">
+                </div>
+                <button class="btn" id="searchBtn">Подобрать формулы</button>
+            </div>
+
+            <div class="search-result" id="searchResult"></div>
+        </section>
+
+        <hr class="divider">
+
+        <h2 class="section-title">Проверка заказа</h2>
+        <p class="subtitle">Загрузите PDF файл для автоматического анализа из StartОкна: Печать/Резерв/3.4 Заполнения</p>
 
         <div class="upload-area" id="uploadArea">
             <div class="upload-icon">📄</div>
@@ -365,6 +503,9 @@
         const checkBtn = document.getElementById('checkBtn');
         const resultArea = document.getElementById('resultArea');
         const loader = document.getElementById('loader');
+        const sizeInput = document.getElementById('sizeInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const searchResult = document.getElementById('searchResult');
 
         let selectedFile = null;
 
@@ -511,6 +652,102 @@
 
             resultArea.innerHTML = html;
             resultArea.style.display = 'block';
+        }
+
+        searchBtn.addEventListener('click', async () => {
+            const size = sizeInput.value.trim();
+            if (!size) {
+                renderSearchError('Укажите размер стеклопакета');
+                return;
+            }
+
+            searchBtn.disabled = true;
+            searchResult.style.display = 'block';
+            searchResult.innerHTML = `
+                <div class="search-summary">
+                    Идет поиск формул по таблице слипания...
+                </div>
+            `;
+
+            try {
+                const response = await fetch('/api/slip-formulas', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ size })
+                });
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Ошибка поиска');
+                }
+
+                renderSearchResult(data);
+            } catch (error) {
+                renderSearchError(error.message);
+            } finally {
+                searchBtn.disabled = false;
+            }
+        });
+
+        sizeInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                searchBtn.click();
+            }
+        });
+
+        function renderSearchError(message) {
+            searchResult.innerHTML = `
+                <div class="search-summary warning">
+                    ${message}
+                </div>
+            `;
+            searchResult.style.display = 'block';
+        }
+
+        function renderSearchResult(data) {
+            const roundedSize = `${data.width_round}x${data.height_round}`;
+            const requestedSize = `${data.width}x${data.height}`;
+
+            if (data.status === 'not_found') {
+                searchResult.innerHTML = `
+                    <div class="search-summary warning">
+                        ${data.message}. Округление по таблице: <b>${roundedSize}</b>.
+                    </div>
+                `;
+                return;
+            }
+
+            const groups = [
+                { key: '1k', title: '1-камерные формулы' },
+                { key: '2k', title: '2-камерные формулы' },
+                { key: '3k', title: '3-камерные формулы' },
+            ].filter(group => (data.formulas[group.key] || []).length > 0);
+
+            const groupsHtml = groups.map(group => `
+                <div class="formula-card">
+                    <h3>${group.title}</h3>
+                    <ul class="formula-list">
+                        ${data.formulas[group.key].map(formula => `<li>${formula}</li>`).join('')}
+                    </ul>
+                </div>
+            `).join('');
+
+            const markingLine = data.marking ? `<div><strong>Маркировка:</strong> ${data.marking}</div>` : '';
+
+            searchResult.innerHTML = `
+                <div class="search-summary">
+                    <div><strong>Размер:</strong> ${requestedSize}</div>
+                    <div><strong>Округление по таблице:</strong> ${roundedSize}</div>
+                    ${markingLine}
+                </div>
+                <div class="formula-grid">
+                    ${groupsHtml}
+                </div>
+            `;
+            searchResult.style.display = 'block';
         }
     </script>
 

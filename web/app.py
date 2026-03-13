@@ -4,12 +4,14 @@ import tempfile
 import logging
 import html
 import shutil
+import re
 from typing import List, Optional
 
 from fastapi import FastAPI, Request, UploadFile, File, Depends, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, field_validator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,14 +27,72 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="QualAnalyze Web Interface")
 
-# Mount static files if needed (e.g. for css/js)
-# app.mount("/static", StaticFiles(directory="web/static"), name="static")
-
 templates = Jinja2Templates(directory="web/templates")
+FRONTEND_DIST_DIR = os.path.join("frontend", "dist")
+FRONTEND_ASSETS_DIR = os.path.join(FRONTEND_DIST_DIR, "assets")
+
+if os.path.isdir(FRONTEND_ASSETS_DIR):
+    app.mount("/assets", StaticFiles(directory=FRONTEND_ASSETS_DIR), name="assets")
+
+
+class SlipFormulaLookupRequest(BaseModel):
+    size: str
+
+    @field_validator("size")
+    @classmethod
+    def validate_size(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Укажите размер стеклопакета")
+        return value
+
+
+def parse_size_input(size_value: str) -> tuple[int, int]:
+    normalized = re.sub(r"\s+", "", size_value.lower())
+    match = re.fullmatch(r"(\d{2,5})[*xх×](\d{2,5})", normalized)
+    if not match:
+        raise HTTPException(
+            status_code=400,
+            detail="Введите размер в формате 1520*2730"
+        )
+
+    width = int(match.group(1))
+    height = int(match.group(2))
+
+    if width <= 0 or height <= 0:
+        raise HTTPException(status_code=400, detail="Размеры должны быть больше нуля")
+
+    return width, height
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
+    frontend_index = os.path.join(FRONTEND_DIST_DIR, "index.html")
+    if os.path.exists(frontend_index):
+        return FileResponse(frontend_index)
     return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.post("/api/slip-formulas")
+async def get_slip_formulas(
+    payload: SlipFormulaLookupRequest,
+    session: AsyncSession = Depends(get_session)
+):
+    width, height = parse_size_input(payload.size)
+
+    analyzer = Analyzer(session)
+    result = await analyzer.get_slip_formulas_by_size(width, height)
+
+    if not result["found"]:
+        return JSONResponse(content={
+            "status": "not_found",
+            "message": f"Для размера {width}x{height} правило не найдено",
+            **result
+        })
+
+    return JSONResponse(content={
+        "status": "success",
+        **result
+    })
 
 @app.post("/api/check")
 async def check_file(

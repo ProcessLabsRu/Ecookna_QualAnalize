@@ -165,6 +165,54 @@ class Analyzer:
             return 0
         return len(re.findall(r"[xх][нНhHwW]", formula, re.IGNORECASE))
 
+    async def _find_size_control_rule(self, width: int, height: int) -> Tuple[Optional[SizeControl], int, int]:
+        """Returns matching size_control rule with rounded dimensions."""
+        w_round = self._round_size(width)
+        h_round = self._round_size(height)
+
+        stmt = select(SizeControl).where(
+            or_(
+                and_(SizeControl.dim1 == w_round, SizeControl.dim2 == h_round),
+                and_(SizeControl.dim1 == h_round, SizeControl.dim2 == w_round)
+            )
+        ).limit(1)
+        result = await self.session.execute(stmt)
+        return result.scalars().first(), w_round, h_round
+
+    async def get_slip_formulas_by_size(self, width: int, height: int) -> dict:
+        """
+        Returns all available slip formulas for the provided dimensions.
+        Result is grouped by camera count and uses the same size rounding as validation.
+        """
+        rule, w_round, h_round = await self._find_size_control_rule(width, height)
+
+        if not rule:
+            return {
+                "found": False,
+                "width": width,
+                "height": height,
+                "width_round": w_round,
+                "height_round": h_round,
+                "marking": None,
+                "formulas": {}
+            }
+
+        formulas = {
+            "1k": [value for value in [rule.formula_1_1k, rule.formula_2_1k] if value],
+            "2k": [value for value in [rule.formula_1_2k, rule.formula_2_2k] if value],
+            "3k": [value for value in [rule.formula_1_3k, rule.formula_2_3k] if value],
+        }
+
+        return {
+            "found": True,
+            "width": width,
+            "height": height,
+            "width_round": w_round,
+            "height_round": h_round,
+            "marking": rule.marking,
+            "formulas": formulas
+        }
+
     async def check_slip(self, width: int, height: int, formula_elements: List[dict]) -> List[str]:
         """
         Validates the formula against size_control table.
@@ -195,15 +243,7 @@ class Analyzer:
         cam_count = sum(1 for e in formula_elements if e["type"] == "frame")
         
         # 3. Find matching rule
-        # Search by rounded dims, orientation independent
-        stmt = select(SizeControl).where(
-            or_(
-                and_(SizeControl.dim1 == w_round, SizeControl.dim2 == h_round),
-                and_(SizeControl.dim1 == h_round, SizeControl.dim2 == w_round)
-            )
-        ).limit(1)
-        result = await self.session.execute(stmt)
-        rule = result.scalars().first()
+        rule, _, _ = await self._find_size_control_rule(width, height)
         
         if not rule:
             return [f"Не найдено правило слипания для размера {w_round}x{h_round}"]
