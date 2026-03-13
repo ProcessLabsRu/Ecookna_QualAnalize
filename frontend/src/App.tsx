@@ -501,7 +501,7 @@ export default function App() {
     <main className="min-h-screen px-4 py-4 text-foreground sm:px-6 lg:px-8">
       <div className="mx-auto flex max-w-7xl flex-col gap-4">
         <header className="overflow-hidden rounded-[28px] border border-border/60 bg-card/90 shadow-sm backdrop-blur">
-          <div className="grid gap-6 px-5 py-5 lg:grid-cols-[260px_minmax(0,1fr)_250px] lg:items-center lg:gap-8 lg:px-7">
+          <div className="grid gap-6 px-5 py-5 lg:grid-cols-[260px_minmax(0,1fr)_250px] lg:items-start lg:gap-8 lg:px-7">
             <div className="overflow-hidden rounded-[24px] border border-border/70 bg-white/80 shadow-sm">
               <img
                 src={heroQaIllustration}
@@ -516,7 +516,7 @@ export default function App() {
               </h1>
             </div>
 
-            <div className="flex items-start justify-center pt-1 lg:justify-end">
+            <div className="flex h-full items-start justify-center self-start pt-0 lg:justify-end">
               <img
                 src={ecooknaGroupLogo}
                 alt="ECOOKNA GROUP"
