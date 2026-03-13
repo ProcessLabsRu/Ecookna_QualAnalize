@@ -281,9 +281,9 @@ export default function App() {
           </div>
         </header>
 
-        <section className="grid gap-4 xl:grid-cols-[0.9fr_1.05fr_1.2fr] xl:items-stretch">
-          <Card className="overflow-hidden border-border/70 bg-card/95 shadow-sm">
-            <CardHeader className="min-h-40 gap-3 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
+        <section className="grid gap-4 xl:h-[43rem] xl:grid-cols-[0.9fr_1.05fr_1.2fr] xl:items-stretch">
+          <Card className="overflow-hidden border-border/70 bg-card/95 shadow-sm xl:h-full">
+            <CardHeader className="min-h-32 gap-2 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <CardTitle className="text-2xl">Подбор формулы</CardTitle>
@@ -355,8 +355,8 @@ export default function App() {
             </CardContent>
           </Card>
 
-          <Card className="overflow-hidden border-border/70 bg-card/95 shadow-sm">
-            <CardHeader className="min-h-40 gap-3 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
+          <Card className="overflow-hidden border-border/70 bg-card/95 shadow-sm xl:h-full">
+            <CardHeader className="min-h-32 gap-2 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
               <div className="flex items-start justify-between gap-4">
                 <div className="space-y-2">
                   <CardTitle className="text-2xl">Проверка заказа</CardTitle>
@@ -438,8 +438,8 @@ export default function App() {
             </CardContent>
           </Card>
         
-          <Card className="border-border/70 bg-card/95 shadow-sm">
-            <CardHeader className="gap-4 border-b border-border/70">
+          <Card className="overflow-hidden border-border/70 bg-card/95 shadow-sm xl:h-full">
+            <CardHeader className="min-h-32 gap-2 border-b border-border/70 bg-[linear-gradient(135deg,rgba(39,174,96,0.12),rgba(255,255,255,0.9))]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   {activeResult === "search" ? (
@@ -477,23 +477,25 @@ export default function App() {
               </div>
               <CardTitle className="text-2xl">Результат проверок</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 pt-6">
+            <CardContent className="flex flex-1 flex-col pt-5">
               {resultText ? (
-                <div className="rounded-[24px] border border-border/70 bg-secondary/25 p-3">
+                <div className="h-full rounded-[24px] border border-border/70 bg-secondary/25 p-3">
                   <textarea
                     readOnly
                     value={resultText}
-                    className="h-[28rem] w-full resize-none rounded-[18px] border border-border/70 bg-white/90 p-4 font-mono text-sm leading-6 text-foreground outline-none xl:h-[31rem]"
+                    className="h-full min-h-[20rem] w-full resize-none rounded-[18px] border border-border/70 bg-white/90 p-4 font-mono text-sm leading-6 text-foreground outline-none"
                   />
                 </div>
               ) : (
-                <Alert className="rounded-2xl border-border/70 bg-secondary/30">
+                <div className="flex h-full items-center">
+                <Alert className="w-full rounded-2xl border-border/70 bg-secondary/30">
                   <AlertCircle className="size-4" />
                   <AlertTitle>Пока нет результата</AlertTitle>
                   <AlertDescription>
                     Выполните подбор формулы или проверку PDF, и результат появится здесь в едином блоке.
                   </AlertDescription>
                 </Alert>
+                </div>
               )}
             </CardContent>
           </Card>
