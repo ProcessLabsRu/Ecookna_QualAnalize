@@ -1,10 +1,14 @@
 import { useRef, useState } from "react"
 import {
   AlertCircle,
+  CheckCircle2,
   Copy,
   FileSearch,
   FileUp,
+  Info,
   LoaderCircle,
+  OctagonAlert,
+  TriangleAlert,
   ScanSearch,
   Search,
 } from "lucide-react"
@@ -130,6 +134,197 @@ function formatPdfResultText(result: PdfCheckResponse | null, error: string | nu
   })
 
   return lines.join("\n")
+}
+
+function SearchResultView({
+  result,
+  error,
+}: {
+  result: SlipLookupResponse | null
+  error: string | null
+}) {
+  if (error) {
+    return (
+      <Alert variant="destructive" className="rounded-2xl border-destructive/25 bg-destructive/5">
+        <OctagonAlert className="size-4" />
+        <AlertTitle>Ошибка подбора</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (!result) {
+    return null
+  }
+
+  const statusTone =
+    result.status === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+      : "border-amber-200 bg-amber-50 text-amber-950"
+
+  const statusIcon =
+    result.status === "success" ? (
+      <CheckCircle2 className="size-4" />
+    ) : (
+      <TriangleAlert className="size-4" />
+    )
+
+  const statusTitle = result.status === "success" ? "Формулы найдены" : "Правило не найдено"
+
+  return (
+    <div className="space-y-4">
+      <Alert className={`rounded-2xl ${statusTone}`}>
+        {statusIcon}
+        <AlertTitle>{statusTitle}</AlertTitle>
+        <AlertDescription>
+          {result.status === "success"
+            ? "Подбор выполнен по таблице слипания."
+            : "Для указанных размеров подходящее правило не найдено."}
+        </AlertDescription>
+      </Alert>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Размер</div>
+          <div className="mt-2 text-lg font-semibold">{result.width}×{result.height}</div>
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Округление</div>
+          <div className="mt-2 text-lg font-semibold">{result.width_round}×{result.height_round}</div>
+        </div>
+      </div>
+
+      {result.marking ? (
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Маркировка</div>
+          <div className="mt-2 text-base font-medium">{result.marking}</div>
+        </div>
+      ) : null}
+
+      {result.status === "success" ? (
+        <div className="space-y-3">
+          {formulaGroups
+            .filter(({ key }) => (result.formulas[key] || []).length > 0)
+            .map(({ key, title }) => (
+              <div key={key} className="rounded-2xl border border-border/70 bg-white/90 p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Info className="size-4 text-primary" />
+                  <h3 className="text-sm font-semibold">{title}</h3>
+                </div>
+                <ul className="space-y-2">
+                  {result.formulas[key].map((formula) => (
+                    <li key={formula} className="flex items-start gap-3 rounded-xl bg-secondary/35 px-3 py-2">
+                      <span className="mt-1 size-2 rounded-full bg-primary" />
+                      <span className="font-mono text-sm">{formula}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function PdfResultView({
+  result,
+  error,
+}: {
+  result: PdfCheckResponse | null
+  error: string | null
+}) {
+  if (error) {
+    return (
+      <Alert variant="destructive" className="rounded-2xl border-destructive/25 bg-destructive/5">
+        <OctagonAlert className="size-4" />
+        <AlertTitle>Ошибка проверки PDF</AlertTitle>
+        <AlertDescription>{error}</AlertDescription>
+      </Alert>
+    )
+  }
+
+  if (!result) {
+    return null
+  }
+
+  const isSuccess = result.status === "success"
+  const isWarning = result.status === "warning"
+
+  return (
+    <div className="space-y-4">
+      <Alert
+        className={cn(
+          "rounded-2xl",
+          isSuccess
+            ? "border-emerald-200 bg-emerald-50 text-emerald-950"
+            : isWarning
+              ? "border-amber-200 bg-amber-50 text-amber-950"
+              : "border-destructive/25 bg-destructive/5 text-foreground",
+        )}
+      >
+        {isSuccess ? (
+          <CheckCircle2 className="size-4" />
+        ) : isWarning ? (
+          <TriangleAlert className="size-4" />
+        ) : (
+          <OctagonAlert className="size-4" />
+        )}
+        <AlertTitle>
+          {isSuccess ? "Проверка завершена без замечаний" : isWarning ? "Нужна корректная выгрузка" : "Найдены замечания"}
+        </AlertTitle>
+        <AlertDescription>
+          {isWarning && result.message
+            ? result.message
+            : isSuccess
+              ? "Отклонений по таблице слипания не обнаружено."
+              : `Проблемных позиций: ${result.issues_count} из ${result.total_items}.`}
+        </AlertDescription>
+      </Alert>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Файл</div>
+          <div className="mt-2 text-base font-semibold break-all">{result.file_name}</div>
+        </div>
+        <div className="rounded-2xl border border-border/70 bg-white/90 p-4">
+          <div className="text-xs uppercase tracking-[0.14em] text-muted-foreground">Позиции / проблемы</div>
+          <div className="mt-2 text-base font-semibold">
+            {result.total_items} / {result.issues_count}
+          </div>
+        </div>
+      </div>
+
+      {result.report_data.length > 0 ? (
+        <div className="space-y-3">
+          {result.report_data.map((item) => (
+            <div key={`${item.pos_num}-${item.size}`} className="rounded-2xl border border-border/70 bg-white/90 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-base font-semibold">Позиция №{item.pos_num}</div>
+                  <div className="text-sm text-muted-foreground">{item.size}</div>
+                </div>
+                <TriangleAlert className="size-4 text-destructive" />
+              </div>
+              <div className="mt-3 space-y-1 text-sm">
+                <div><span className="font-medium">Формула:</span> {item.formula}</div>
+                <div><span className="font-medium">Открывание:</span> {item.is_outside ? "Наружу (формула перевернута)" : "Внутрь"}</div>
+                <div><span className="font-medium">Раскладка:</span> {item.raskl || "Нет"}</div>
+              </div>
+              <ul className="mt-3 space-y-2">
+                {item.errors.map((issue) => (
+                  <li key={issue} className="flex items-start gap-3 rounded-xl bg-destructive/5 px-3 py-2 text-sm">
+                    <span className="mt-1 size-2 rounded-full bg-destructive" />
+                    <span>{issue}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export default function App() {
@@ -481,12 +676,14 @@ export default function App() {
             </CardHeader>
             <CardContent className="flex flex-1 flex-col pt-5">
               {resultText ? (
-                <div className="h-full rounded-[24px] border border-border/70 bg-secondary/25 p-3">
-                  <textarea
-                    readOnly
-                    value={resultText}
-                    className="h-full min-h-[20rem] w-full resize-none rounded-[18px] border border-border/70 bg-white/90 p-4 font-mono text-sm leading-6 text-foreground outline-none"
-                  />
+                <div className="h-full overflow-auto rounded-[24px] border border-border/70 bg-secondary/25 p-3">
+                  <div className="min-h-full rounded-[18px] border border-border/70 bg-white/90 p-4">
+                    {activeResult === "search" ? (
+                      <SearchResultView result={searchResult} error={searchError} />
+                    ) : (
+                      <PdfResultView result={pdfResult} error={pdfError} />
+                    )}
+                  </div>
                 </div>
               ) : (
                 <div className="flex h-full items-center">
