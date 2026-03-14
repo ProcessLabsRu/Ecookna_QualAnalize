@@ -1,27 +1,19 @@
-import re
-import pdfplumber
 import logging
-from typing import List, Dict, Optional
+import re
+from typing import Any, Dict, List, Optional
+
+import pdfplumber
 
 logger = logging.getLogger(__name__)
 
+
 class PDFParser:
-    # Regex Patterns
-    # Номер: допускаем пробелы/переносы внутри
-    # 1: Number, 2: Raw Formula, 3: Thickness, 4: Width, 5: Height, 6: Count, 7: Area, 8: Mass
-    # Regex Patterns
-    # 1: Number
     NUMBER_RE = re.compile(r"(\d{2}-\d{3}-\s*\d{4}\/\d+\/\d+(?:[\/\w-]*))")
-    
-    # Anchor: Width x Height Count Area Mass
-    # 1: Width, 2: Height, 3: Count, 4: Area, 5: Mass
-    ANCHOR_RE = re.compile(
-        r"(\d+)\s*[x×хХ]\s*(\d+)\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)"
-    )
-    
-    # Thickness RE (for context search)
+    ANCHOR_RE = re.compile(r"(\d+)\s*[x×хХ]\s*(\d+)\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)")
     THICK_RE = re.compile(r"\((\d+)(?:\s*мм)?\)")
-    FORMULA_TOKEN_RE = re.compile(r"^[0-9A-Za-zА-Яа-я.,+\-/]+$")
+    FORMULA_TOKEN_RE = re.compile(r"^[0-9A-Za-zА-Яа-я_.,+\-/]+$")
+    SIZE_TOKEN_RE = re.compile(r"^\d+\s*[x×хХ]\s*\d+$")
+    HEADER_TOKENS = {"Номер", "Формула", "Размер", "Площадь", "Масса"}
     STOP_MARKERS = {
         "ВИД",
         "РАСКЛАДКА",
@@ -31,21 +23,36 @@ class PDFParser:
         "МАССА",
         "ИТОГО",
     }
-    
+
     LAYOUT_RE = re.compile(r"Раскладка\s+([^\r\n]+)", re.IGNORECASE)
     SPLIT_RE = re.compile(r"Итого по изделию:", re.IGNORECASE)
+
+    _last_extracted_text: Optional[str] = None
+    _last_extracted_pages: Optional[List[Dict[str, Any]]] = None
 
     @staticmethod
     def extract_text(file_path: str) -> str:
         """Extracts full text from a PDF file using pdfplumber."""
-        full_text = []
+        full_text: List[str] = []
+        page_payloads: List[Dict[str, Any]] = []
         try:
             with pdfplumber.open(file_path) as pdf:
                 for page in pdf.pages:
-                    text = page.extract_text()
+                    text = page.extract_text() or ""
+                    words = page.extract_words(use_text_flow=False, keep_blank_chars=False)
+                    page_payloads.append(
+                        {
+                            "text": text,
+                            "words": words,
+                        }
+                    )
                     if text:
                         full_text.append(text)
-            return "\n".join(full_text)
+
+            result = "\n".join(full_text)
+            PDFParser._last_extracted_text = result
+            PDFParser._last_extracted_pages = page_payloads
+            return result
         except Exception as e:
             logger.error(f"Error extracting text from {file_path}: {e}")
             raise
@@ -66,8 +73,7 @@ class PDFParser:
     @classmethod
     def _looks_like_formula_start(cls, token: str) -> bool:
         return (
-            "x" in token.lower()
-            or "х" in token.lower()
+            ("x" in token.lower() or "х" in token.lower()) and ":" not in token
             or re.match(r"^[0-9]", token) is not None
             or re.match(r"^[HWНШ]", token, re.IGNORECASE) is not None
         )
@@ -108,181 +114,349 @@ class PDFParser:
         return "".join(continuation)
 
     @staticmethod
-    def parse_text(text: str) -> List[Dict]:
-        """Parses the extracted text into structural items."""
+    def _word_text(word: Dict[str, Any]) -> str:
+        return str(word.get("text", "")).strip()
+
+    @staticmethod
+    def _row_top(word: Dict[str, Any]) -> float:
+        return round(float(word.get("top", 0.0)), 1)
+
+    @classmethod
+    def _group_words_into_rows(cls, words: List[Dict[str, Any]], tolerance: float = 3.0) -> List[Dict[str, Any]]:
+        rows: List[Dict[str, Any]] = []
+        for word in sorted(words, key=lambda item: (float(item["top"]), float(item["x0"]))):
+            text = cls._word_text(word)
+            if not text:
+                continue
+
+            if rows and abs(float(word["top"]) - rows[-1]["top"]) <= tolerance:
+                rows[-1]["words"].append(word)
+                current = rows[-1]
+                current["top"] = min(current["top"], float(word["top"]))
+                current["bottom"] = max(current["bottom"], float(word["bottom"]))
+            else:
+                rows.append(
+                    {
+                        "top": float(word["top"]),
+                        "bottom": float(word["bottom"]),
+                        "words": [word],
+                    }
+                )
+
+        for row in rows:
+            row["words"].sort(key=lambda item: float(item["x0"]))
+            row["text"] = " ".join(cls._word_text(word) for word in row["words"])
+
+        return rows
+
+    @classmethod
+    def _find_table_headers(cls, rows: List[Dict[str, Any]]) -> List[Dict[str, float]]:
+        headers: List[Dict[str, float]] = []
+        for row in rows:
+            positions: Dict[str, float] = {}
+            for word in row["words"]:
+                text = cls._word_text(word)
+                if text in cls.HEADER_TOKENS:
+                    positions[text] = float(word["x0"])
+
+            if {"Номер", "Формула", "Размер", "Площадь", "Масса"}.issubset(positions):
+                headers.append(
+                    {
+                        "top": row["top"],
+                        "bottom": row["bottom"],
+                        "number_left": positions["Номер"],
+                        "formula_left": (positions["Номер"] + positions["Формула"]) / 2,
+                        "size_left": positions["Размер"],
+                    }
+                )
+
+        return headers
+
+    @classmethod
+    def _normalize_formula(cls, raw_formula: str) -> str:
+        raw_formula_no_thick = cls.THICK_RE.sub("", cls._normalize_spaces(raw_formula)).strip()
+        return raw_formula_no_thick.replace(" ", "")
+
+    @classmethod
+    def _parse_numbers_from_anchor(cls, anchor_row_text: str) -> Optional[Dict[str, Any]]:
+        match = cls.ANCHOR_RE.search(anchor_row_text)
+        if not match:
+            return None
+
+        try:
+            return {
+                "position_width": int(match.group(1)),
+                "position_hight": int(match.group(2)),
+                "position_count": int(match.group(3)),
+                "position_area": float(match.group(4).replace(",", ".")),
+                "position_mass": float(match.group(5).replace(",", ".")),
+            }
+        except ValueError:
+            return None
+
+    @classmethod
+    def _rows_to_text(cls, rows: List[Dict[str, Any]]) -> str:
+        return "\n".join(row["text"] for row in rows)
+
+    @classmethod
+    def _extract_layout(cls, rows: List[Dict[str, Any]]) -> str:
+        text = cls._rows_to_text(rows)
+        match = cls.LAYOUT_RE.search(text)
+        return match.group(1).strip() if match else "отсутствует"
+
+    @classmethod
+    def _extract_is_outside(cls, rows: List[Dict[str, Any]], raw_formula: str) -> bool:
+        full_text_check = f"{cls._rows_to_text(rows)} {raw_formula}".upper()
+        return (
+            "СНАРУЖИ" in full_text_check
+            or "НАРУЖУ" in full_text_check
+            or re.search(r"FS\b", full_text_check) is not None
+            or raw_formula.upper().endswith("FS")
+        )
+
+    @classmethod
+    def _parse_item_from_rows(
+        cls,
+        rows: List[Dict[str, Any]],
+        formula_left: float,
+        size_left: float,
+    ) -> Optional[Dict[str, Any]]:
+        number_row = None
+        anchor_row = None
+        for row in rows:
+            if number_row is None:
+                for word in row["words"]:
+                    text = cls._word_text(word)
+                    if cls.NUMBER_RE.fullmatch(text):
+                        number_row = row
+                        break
+
+            if anchor_row is None:
+                anchor_words = [
+                    word for word in row["words"] if float(word["x0"]) >= formula_left and float(word["x1"]) <= size_left + 170
+                ]
+                anchor_text = " ".join(cls._word_text(word) for word in anchor_words)
+                if cls.ANCHOR_RE.search(anchor_text):
+                    anchor_row = row
+
+            if number_row is not None and anchor_row is not None:
+                break
+
+        if number_row is None or anchor_row is None:
+            return None
+
+        position_num = next(
+            cls._word_text(word)
+            for word in number_row["words"]
+            if cls.NUMBER_RE.fullmatch(cls._word_text(word))
+        )
+
+        formula_words: List[Dict[str, Any]] = []
+        for row in rows:
+            for word in row["words"]:
+                if float(word["x0"]) >= formula_left and float(word["x1"]) < size_left:
+                    formula_words.append(word)
+
+        formula_words.sort(key=lambda item: (float(item["top"]), float(item["x0"])))
+        raw_formula = " ".join(cls._word_text(word) for word in formula_words if cls._word_text(word))
+        if not raw_formula:
+            return None
+
+        numbers = cls._parse_numbers_from_anchor(anchor_row["text"])
+        if numbers is None:
+            return None
+
+        item = {
+            "position_num": position_num.replace("\n", "").strip(),
+            "position_formula": cls._normalize_formula(raw_formula),
+            "position_raskl": cls._extract_layout(rows),
+            "is_oytside": cls._extract_is_outside(rows, raw_formula),
+            "raw_formula": cls._normalize_spaces(raw_formula),
+        }
+        item.update(numbers)
+        return item
+
+    @classmethod
+    def _parse_page_by_geometry(cls, page_words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        rows = cls._group_words_into_rows(page_words)
+        headers = cls._find_table_headers(rows)
+        if not headers:
+            return []
+
+        items: List[Dict[str, Any]] = []
+        header_index = 0
+        current_header = headers[header_index]
+        current_rows: List[Dict[str, Any]] = []
+
+        def flush_current_rows() -> None:
+            nonlocal current_rows
+            if not current_rows:
+                return
+            item = cls._parse_item_from_rows(
+                current_rows,
+                formula_left=current_header["formula_left"],
+                size_left=current_header["size_left"],
+            )
+            if item:
+                logger.info(
+                    "Geometry parser item %s: Raw='%s', Parsed='%s', IsOutside=%s",
+                    item["position_num"],
+                    item["raw_formula"],
+                    item["position_formula"],
+                    item["is_oytside"],
+                )
+                items.append(item)
+            current_rows = []
+
+        for row in rows:
+            if header_index + 1 < len(headers) and row["top"] >= headers[header_index + 1]["top"]:
+                flush_current_rows()
+                header_index += 1
+                current_header = headers[header_index]
+
+            if row["top"] <= current_header["bottom"]:
+                continue
+
+            if row["text"].startswith("Итого по изделию:"):
+                flush_current_rows()
+                continue
+
+            has_number = any(
+                cls.NUMBER_RE.fullmatch(cls._word_text(word))
+                and float(word["x1"]) <= current_header["formula_left"]
+                for word in row["words"]
+            )
+            if has_number:
+                flush_current_rows()
+                current_rows = [row]
+                continue
+
+            if current_rows:
+                current_rows.append(row)
+
+        flush_current_rows()
+        return items
+
+    @classmethod
+    def _parse_text_by_geometry(cls, text: str) -> Optional[List[Dict[str, Any]]]:
+        if text != cls._last_extracted_text or not cls._last_extracted_pages:
+            return None
+
+        items: List[Dict[str, Any]] = []
+        geometry_used = False
+        for page_payload in cls._last_extracted_pages:
+            page_items = cls._parse_page_by_geometry(page_payload.get("words", []))
+            if page_items:
+                geometry_used = True
+                items.extend(page_items)
+
+        if not geometry_used:
+            return None
+
+        return items
+
+    @classmethod
+    def _parse_text_by_regex(cls, text: str) -> List[Dict]:
         items = []
-        blocks = PDFParser.SPLIT_RE.split(text)
+        blocks = cls.SPLIT_RE.split(text)
 
         for block in blocks:
-            # Extract Layout (Raskladka) if present in the block
-            layout_match = PDFParser.LAYOUT_RE.search(block)
+            layout_match = cls.LAYOUT_RE.search(block)
             layout = layout_match.group(1).strip() if layout_match else "отсутствует"
-
-            # Iterate over all items in the block using Anchors
-            # Anchor: Width x Height Count ...
-            anchors = list(PDFParser.ANCHOR_RE.finditer(block))
+            anchors = list(cls.ANCHOR_RE.finditer(block))
             last_end = 0
-            
+
             for i, anchor in enumerate(anchors):
-                # 1. Define Search Window for Number
-                # From end of previous item (or 0) to start of this anchor
                 pre_context = block[last_end:anchor.start()]
-                
-                # Find Number (take the last one found in this window)
-                num_matches = list(PDFParser.NUMBER_RE.finditer(pre_context))
+                num_matches = list(cls.NUMBER_RE.finditer(pre_context))
                 if not num_matches:
                     logger.warning(f"No number found for anchor at {anchor.start()}")
                     continue
-                
+
                 num_match = num_matches[-1]
                 raw_num = num_match.group(1)
-                
-                # 2. Extract Formula
-                # Text between Number End and Anchor Start (Suffix)
                 raw_formula_chunk = pre_context[num_match.end():].strip()
-                
-                # Check if suffix looks like a formula
                 suffix_has_formula = "x" in raw_formula_chunk.lower() or "х" in raw_formula_chunk.lower()
-                
-                # If suffix doesn't have formula, check Prefix (text before Number)
-                # But we need to be careful not to grab previous item's data if they are close
-                # `pre_context` includes everything from last_end.
-                # `num_match` is the last number found in `pre_context`.
-                # So prefix is everything before `num_match.start()` in `pre_context`.
                 prefix_text = pre_context[:num_match.start()].strip()
-                
-                # Decide which chunk to use as "raw_formula_chunk"
-                # If suffix has formula, prefer it (standard case)
-                # If not, and prefix has formula, use prefix
+
                 if not suffix_has_formula and ("x" in prefix_text.lower() or "х" in prefix_text.lower()):
-                    # Use prefix as formula source
-                    # But we also need to keep suffix for "Name/Attributes" (like 'KALEVA ALUVET FS')
-                    # So raw_formula_clean will be based on prefix, but is_outside check needs all
                     raw_formula_source = prefix_text
-                    # We might want to append suffix to "Name" or just keep it for is_outside check
                 else:
                     raw_formula_source = raw_formula_chunk
 
-                # 3. Extract Post-Context
-                # From Anchor End to start of next anchor (or block end)
-                if i + 1 < len(anchors):
-                    post_context_end = anchors[i+1].start()
-                else:
-                    post_context_end = len(block)
-                
+                post_context_end = anchors[i + 1].start() if i + 1 < len(anchors) else len(block)
                 post_context = block[anchor.end():post_context_end]
-                
-                # 4. Extract Data from Anchor
-                raw_width = anchor.group(1)
-                raw_height = anchor.group(2)
-                raw_count = anchor.group(3)
-                raw_area = anchor.group(4)
-                raw_mass = anchor.group(5)
 
-                # 5. Clean and Normalize
-                # Start with the raw number (cleaned of newlines)
-                base_num = raw_num.replace("\n", "").strip()
-                
-                # Check if we should append suffix to the name
-                # If suffix does NOT look like a formula, we treat it as part of the Name/Position
-                # e.g. "ALUVET FS" in "00-134-1060/1/5/KALEVA ALUVET FS"
-                # formula usually has 'x' or 'х' (cyrillic)
-                
-                name_suffix = ""
-                raw_formula_clean = PDFParser._normalize_spaces(raw_formula_source)
-                
-                # If we used raw_formula_chunk as source (standard case)
-                if raw_formula_source == raw_formula_chunk:
-                     # Check if it looks like a formula
-                    if not ("x" in raw_formula_chunk.lower() or "х" in raw_formula_chunk.lower()):
-                        # It's likely a name part
-                        name_suffix = " " + raw_formula_chunk.strip()
-                        # In this case, formula might be in prefix (already checked above logic)
-                        # or empty/missing. 
-                        # IF we decided earlier that prefix HAS formula (lines 90-94), then raw_formula_source is prefix
-                        # But here we are in the `else` branch of that decision (line 97), so raw_formula_source IS raw_formula_chunk.
-                        
-                        # Wait, logic above (lines 90-97) selects the formula SOURCE.
-                        # If we selected suffix as source, but it doesn't look like formula, 
-                        # maybe we should have selected prefix?
-                        # Or maybe it IS the name and formula is missing?
-                        pass
-
-                # Let's refine the Name construction
-                # Valid full name = Base Number + (Space + Suffix if Suffix is NOT formula)
-                
-                # Re-evaluating Suffix for Name
                 suffix_text = raw_formula_chunk.strip()
                 is_suffix_formula = "x" in suffix_text.lower() or "х" in suffix_text.lower()
-                
-                full_position_name = base_num
-                
+                position_num = raw_num.replace("\n", "").strip()
                 if suffix_text and not is_suffix_formula:
-                    # Append suffix to name
-                    full_position_name = f"{base_num} {suffix_text}"
-                
-                # Cleanup double spaces
-                position_num = re.sub(r"\s+", " ", full_position_name).strip()
-                
-                # Extract Thickness
-                # Check formula chunk first, then post-context
-                thick_match = PDFParser.THICK_RE.search(raw_formula_clean)
-                if not thick_match:
-                    thick_match = PDFParser.THICK_RE.search(post_context)
-                # thickness = int(thick_match.group(1)) if thick_match else 0 # Not strictly used yet
-                
-                # Check is_outside
-                # We concatenate Prefix + Suffix + Post-Context to be sure we catch "FS" / "СНАРУЖИ"
-                # wherever it is (Name, or Formula, or Note)
+                    position_num = f"{position_num} {suffix_text}"
+                position_num = re.sub(r"\s+", " ", position_num).strip()
+
+                raw_formula_clean = cls._normalize_spaces(raw_formula_source)
                 full_text_check = (prefix_text + " " + raw_formula_chunk + " " + post_context).upper()
-                
                 is_outside = (
-                    "СНАРУЖИ" in full_text_check or 
-                    "НАРУЖУ" in full_text_check or 
-                    re.search(r"FS\b", full_text_check) is not None or 
-                    raw_formula_clean.upper().endswith("FS") 
+                    "СНАРУЖИ" in full_text_check
+                    or "НАРУЖУ" in full_text_check
+                    or re.search(r"FS\b", full_text_check) is not None
+                    or raw_formula_clean.upper().endswith("FS")
                 )
 
-                # Normalize formula
-                # 82 Вид СНАРУЖИ на себя 4ИxН14x4М1xН14x4И -> 4ИxН14x4М1xН14x4И
-                # Remove thickness from formula chunk if present
-                raw_formula_no_thick = PDFParser.THICK_RE.sub("", raw_formula_clean).strip()
-                position_formula = PDFParser._extract_formula_source(raw_formula_no_thick)
+                raw_formula_no_thick = cls.THICK_RE.sub("", raw_formula_clean).strip()
+                position_formula = cls._extract_formula_source(raw_formula_no_thick)
 
-                continuation_source = PDFParser.THICK_RE.sub("", post_context).strip()
-                formula_continuation = PDFParser._extract_formula_continuation(continuation_source)
+                continuation_source = cls.THICK_RE.sub("", post_context).strip()
+                formula_continuation = cls._extract_formula_continuation(continuation_source)
                 if formula_continuation:
                     position_formula += formula_continuation
-                
-                # Final cleanup of spaces in formula
-                position_formula = position_formula.replace(" ", "")
-                
-                logger.info(f"Item {position_num}: RawSource='{raw_formula_clean}', Parsed='{position_formula}', IsOutside={is_outside}")
 
-                # Parse numbers
+                position_formula = position_formula.replace(" ", "")
+                logger.info(
+                    "Regex parser item %s: Raw='%s', Parsed='%s', IsOutside=%s",
+                    position_num,
+                    raw_formula_clean,
+                    position_formula,
+                    is_outside,
+                )
+
                 try:
-                    width = int(raw_width)
-                    height = int(raw_height)
-                    count = int(raw_count)
-                    area = float(raw_area.replace(",", "."))
-                    mass = float(raw_mass.replace(",", "."))
+                    width = int(anchor.group(1))
+                    height = int(anchor.group(2))
+                    count = int(anchor.group(3))
+                    area = float(anchor.group(4).replace(",", "."))
+                    mass = float(anchor.group(5).replace(",", "."))
                 except ValueError as e:
                     logger.warning(f"Error parsing numbers for item {position_num}: {e}")
                     continue
 
-                items.append({
-                    "position_num": position_num,
-                    "position_formula": position_formula,
-                    "position_raskl": layout,
-                    "position_width": width,
-                    "position_hight": height,
-                    "position_count": count,
-                    "position_area": area,
-                    "position_mass": mass,
-                    "is_oytside": is_outside,
-                    "raw_formula": raw_formula_clean 
-                })
-                
+                items.append(
+                    {
+                        "position_num": position_num,
+                        "position_formula": position_formula,
+                        "position_raskl": layout,
+                        "position_width": width,
+                        "position_hight": height,
+                        "position_count": count,
+                        "position_area": area,
+                        "position_mass": mass,
+                        "is_oytside": is_outside,
+                        "raw_formula": raw_formula_clean,
+                    }
+                )
+
                 last_end = anchor.end()
-        
+
         return items
+
+    @classmethod
+    def parse_text(cls, text: str) -> List[Dict]:
+        """Parses the extracted text into structural items."""
+        geometry_items = cls._parse_text_by_geometry(text)
+        if geometry_items is not None:
+            return geometry_items
+
+        if text == cls._last_extracted_text and cls._last_extracted_pages:
+            logger.warning("Geometry parser unavailable for this PDF page layout, falling back to regex parser.")
+
+        return cls._parse_text_by_regex(text)
