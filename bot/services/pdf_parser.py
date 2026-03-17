@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class PDFParser:
     NUMBER_RE = re.compile(r"(\d{2}-\d{3}-\s*\d{4}\/\d+\/\d+(?:[\/\w-]*))")
-    ANCHOR_RE = re.compile(r"(\d+)\s*[x×хХ]\s*(\d+)\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)")
+    ANCHOR_RE = re.compile(r"(\d+)\s*[x×хХ]\s*(\d+)\s+(\d+)\s+([\d.,]+)(?:\s+([\d.,]+))?")
     THICK_RE = re.compile(r"\((\d+)(?:\s*мм)?\)")
     FORMULA_TOKEN_RE = re.compile(r"^[0-9A-Za-zА-Яа-я_.,+\-/]+$")
     SIZE_TOKEN_RE = re.compile(r"^\d+\s*[x×хХ]\s*\d+$")
@@ -77,8 +77,20 @@ class PDFParser:
 
     @classmethod
     def _looks_like_formula_start(cls, token: str) -> bool:
+        token_lc = token.lower()
+        has_x = "x" in token_lc or "х" in token_lc
+
+        # Если это чистое число > 80, скорее всего это масса или площадь, а не начало формулы
+        if not has_x and re.match(r"^\d+(?:[.,]\d+)?$", token):
+            try:
+                val = float(token.replace(",", "."))
+                if val > 80:
+                    return False
+            except ValueError:
+                pass
+
         return (
-            ("x" in token.lower() or "х" in token.lower()) and ":" not in token
+            has_x and ":" not in token
             or re.match(r"^[0-9]", token) is not None
             or re.match(r"^[HWНШ]", token, re.IGNORECASE) is not None
         )
@@ -190,14 +202,18 @@ class PDFParser:
             return None
 
         try:
+            mass_val = 0.0
+            if match.group(5):
+                mass_val = float(match.group(5).replace(",", "."))
+
             return {
                 "position_width": int(match.group(1)),
                 "position_hight": int(match.group(2)),
                 "position_count": int(match.group(3)),
                 "position_area": float(match.group(4).replace(",", ".")),
-                "position_mass": float(match.group(5).replace(",", ".")),
+                "position_mass": mass_val,
             }
-        except ValueError:
+        except (ValueError, IndexError):
             return None
 
     @classmethod
@@ -269,6 +285,31 @@ class PDFParser:
         numbers = cls._parse_numbers_from_anchor(anchor_row["text"])
         if numbers is None:
             return None
+
+        # If mass is missing in anchor row, try to find it in other rows of this position
+        if numbers.get("position_mass") == 0.0:
+            for row in rows:
+                # 1. Try to find "Масса заполнения - 123.45" or similar
+                m_match = re.search(r"Масса\s*(?:заполнения)?\s*[-—]?\s*([\d.,]+)", row["text"], re.IGNORECASE)
+                if m_match:
+                    try:
+                        numbers["position_mass"] = float(m_match.group(1).replace(",", "."))
+                        break
+                    except ValueError:
+                        continue
+
+            if numbers.get("position_mass") == 0.0:
+                # 2. Try to find a numeric value at the end of the line which has the order number
+                for row in rows:
+                    if any(cls.NUMBER_RE.fullmatch(cls._word_text(w)) for w in row["words"]):
+                        row_words = [cls._word_text(w) for w in row["words"] if cls._word_text(w)]
+                        if len(row_words) > 1:
+                            last_word = row_words[-1].replace(",", ".")
+                            if re.match(r"^\d+(?:\.\d+)?$", last_word):
+                                try:
+                                    numbers["position_mass"] = float(last_word)
+                                except ValueError:
+                                    pass
 
         item = {
             "position_num": position_num.replace("\n", "").strip(),
@@ -424,8 +465,26 @@ class PDFParser:
                     height = int(anchor.group(2))
                     count = int(anchor.group(3))
                     area = float(anchor.group(4).replace(",", "."))
-                    mass = float(anchor.group(5).replace(",", "."))
-                except ValueError as e:
+                    mass_text = anchor.group(5)
+                    mass = 0.0
+                    if mass_text:
+                        mass = float(mass_text.replace(",", "."))
+                    else:
+                        m_m = re.search(r"Масса\s*(?:заполнения)?\s*[-—]?\s*([\d.,]+)", post_context, re.IGNORECASE)
+                        if m_m:
+                            mass = float(m_m.group(1).replace(",", "."))
+                        else:
+                            lines = pre_context.split("\n")
+                            if lines:
+                                last_line = lines[-1].strip()
+                                if cls.NUMBER_RE.search(last_line):
+                                    parts = last_line.split()
+                                    if len(parts) > 1 and re.match(r"^\d+(?:\.\d+)?$", parts[-1].replace(",", ".")):
+                                        try:
+                                            mass = float(parts[-1].replace(",", "."))
+                                        except ValueError:
+                                            pass
+                except (ValueError, IndexError) as e:
                     logger.warning(f"Error parsing numbers for item {position_num}: {e}")
                     continue
 
