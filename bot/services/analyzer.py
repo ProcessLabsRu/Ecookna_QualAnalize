@@ -10,6 +10,7 @@ from bot.services.directus import DirectusClient
 logger = logging.getLogger(__name__)
 
 FORMULA_SPLIT_RE = re.compile(r"(?<=[0-9A-Za-zА-Яа-я.,])[xх](?=[0-9A-Za-zА-Яа-я])")
+TEMPERED_FORMULA_RE = re.compile(r"\d+\s*(?:зак|з)", re.IGNORECASE)
 
 class Analyzer:
     def __init__(self, session: AsyncSession):
@@ -58,6 +59,10 @@ class Analyzer:
         match = re.search(r"(\d+)", p)
         return (int(match.group(1)), False) if match else (0, False)
 
+    def _is_tempered_article(self, article: str) -> bool:
+        """Tempering is identified only by `з`/`зак` in the formula after glass thickness."""
+        return bool(TEMPERED_FORMULA_RE.search(article))
+
     def parse_formula(self, formula: str, is_outside: bool) -> List[dict]:
         """
         Parses formula into elements, filters films, and handles 'is_outside' order.
@@ -97,7 +102,7 @@ class Analyzer:
             is_tempered = False
             if etype == "glass":
                 # Проверка на маркеры закалки в строке
-                if re.search(r"зак|з|zak|z", article, re.IGNORECASE):
+                if self._is_tempered_article(article):
                     is_tempered = True
                 
                 # Проверка в кэше статей (существующая логика)
@@ -453,13 +458,13 @@ class Analyzer:
 
     def _parse_rule_string(self, rule_str: str) -> List[dict]:
         """
-        Parses rule strings like '4/12/4', '6з/16/6з/14/6з', '6 з 16 6з', '6 ESG-16-6zak'
+        Parses rule strings like '4/12/4', '6з/16/6з/14/6з', '6 з 16 6з', '6зак-16-6'
         into ordered dicts with tempered flag.
         """
         if not rule_str:
             return []
 
-        pattern = re.compile(r"(\d+)\s*(зак|з|zak|z|esg|tempered)?", re.IGNORECASE)
+        pattern = re.compile(r"(\d+)\s*(зак|з)?", re.IGNORECASE)
         result = []
 
         for m in pattern.finditer(rule_str):

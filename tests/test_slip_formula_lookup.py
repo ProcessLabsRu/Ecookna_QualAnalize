@@ -162,6 +162,28 @@ def test_analyzer_has_spacer_detects_single_glazing():
     assert analyzer.has_spacer("") is False
 
 
+def test_analyzer_parse_formula_does_not_treat_bronze_as_tempered():
+    analyzer = Analyzer(session=None)
+
+    elements = analyzer.parse_formula("6LHSolarBronzexН12x6закxН12x6зак", is_outside=False)
+    glasses = [element for element in elements if element["type"] == "glass"]
+
+    assert [element["article"] for element in glasses] == ["6LHSolarBronze", "6зак", "6зак"]
+    assert [element["is_tempered"] for element in glasses] == [False, True, True]
+
+
+def test_analyzer_uses_processing_flag_from_articles_cache_for_tempering():
+    analyzer = Analyzer(session=None)
+    analyzer._articles_cache = {
+        "6LHSolarBronze": {"type_of_processing": "Закаленное"},
+    }
+
+    elements = analyzer.parse_formula("6LHSolarBronzexН12x4М1", is_outside=False)
+    glasses = [element for element in elements if element["type"] == "glass"]
+
+    assert [element["is_tempered"] for element in glasses] == [True, False]
+
+
 PDF_FIXTURE_PATH = "/Users/romangaleev/Downloads/18-133-1041.pdf"
 
 

@@ -57,10 +57,10 @@ BEGIN
   WHERE
     -- откидываем рамки типа W14 / Н14
     a.article !~* '^(w|н)\s*\d+'
-    -- нет "4з"/"6з" в артикуле
-    AND NOT (a.article ~ '\d+\s*з')
+    -- нет "4з"/"6з"/"6зак" в артикуле
+    AND NOT (a.article ~* '\d+\s*(з|зак)')
     -- и обработка не говорит о закалке
-    AND a.obr !~* '(закал|tempe|esg|harden|toughen)';
+    AND a.obr !~* 'закал';
 
   IF v_missing IS NULL OR array_length(v_missing, 1) IS NULL THEN
     RETURN;
