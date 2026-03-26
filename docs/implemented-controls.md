@@ -1,0 +1,337 @@
+# Список реализованных контролей
+
+## 1. Общая модель контроля
+
+Контроли реализованы в двух слоях:
+
+- прикладной слой Python: первичная валидация входных данных, разбор PDF, поиск правил по размеру, web/Telegram-ответ;
+- слой PostgreSQL: расчет служебных полей позиции, запуск детерминированных проверок и фиксация ошибок в `qual_analize_pos_issues`.
+
+Основным источником истины для формализованных проверок является SQL-логика.
+
+## 2. Предварительные технические проверки
+
+### 2.1. Контроль типа файла
+
+Где реализован:
+
+- `web/app.py`
+- `bot/handlers/document_handler.py`
+
+Смысл:
+
+- принимаются только PDF-файлы.
+
+Реакция:
+
+- web возвращает ошибку `400`;
+- бот просит прислать PDF.
+
+### 2.2. Контроль формата размера при подборе формулы
+
+Где реализован:
+
+- `web/app.py`, функция `parse_size_input`
+
+Смысл:
+
+- размер должен быть задан в формате `ширина*высота`;
+- поддерживаются разделители `*`, `x`, `х`, `×`;
+- размеры должны быть положительными числами.
+
+Реакция:
+
+- HTTP `400` с поясняющим текстом.
+
+### 2.3. Контроль извлечения позиций из PDF
+
+Где реализован:
+
+- `web/app.py`
+- `bot/handlers/document_handler.py`
+- `bot/services/pdf_parser.py`
+
+Смысл:
+
+- если из PDF не удалось извлечь позиции, дальнейшая проверка не выполняется.
+
+Реакция:
+
+- пользователю возвращается сообщение о необходимости корректной выгрузки.
+
+## 3. Расчетные контроли перед основными проверками
+
+### 3.1. Округление размеров
+
+Где реализован:
+
+- SQL-функция `trg_calc_qual_pos`
+- Python-метод `Analyzer._round_size`
+
+Смысл:
+
+- размеры округляются до сотен;
+- остаток `<= 50` округляется вниз;
+- остаток `>= 51` округляется вверх.
+
+Назначение:
+
+- привести размеры к ключу поиска в `size_control`.
+
+### 3.2. Определение количества камер
+
+Где реализован:
+
+- SQL-функция `trg_calc_qual_pos`
+- Python-метод `Analyzer.has_spacer` / логика подсчета рамок
+
+Смысл:
+
+- количество камер определяется по наличию дистанционных рамок в формуле.
+
+Назначение:
+
+- выбрать набор допустимых формул `1k`, `2k`, `3k`.
+
+### 3.3. Подбор правил из `size_control`
+
+Где реализован:
+
+- SQL-функция `trg_calc_qual_pos`
+- Python-метод `Analyzer._find_size_control_rule`
+
+Смысл:
+
+- правило ищется по паре округленных размеров без учета ориентации;
+- при нахождении заполняются поля `f1`, `f2`, `position_formula_slip`.
+
+## 4. Реализованные бизнес-контроли в PostgreSQL
+
+### 4.1. Контроль отсутствия правила слипания
+
+Код ошибки:
+
+- `SLIP_FORMULA_MISSING`
+
+Где реализован:
+
+- `scripts/procedures/check_slip.sql`
+
+Логика:
+
+- если для позиции с камерами не найдены `f1` и `f2`, система фиксирует ошибку;
+- для одинарного остекления этот контроль не применяется.
+
+Результат:
+
+- создается запись в `qual_analize_pos_issues`.
+
+### 4.2. Контроль соответствия структуры стеклопакета таблице слипания
+
+Код ошибки:
+
+- `SLIP_MISMATCH`
+
+Где реализован:
+
+- `scripts/procedures/check_slip.sql`
+
+Логика:
+
+- фактическая структура позиции разбирается в последовательность толщин;
+- при открывании наружу порядок элементов переворачивается;
+- структура сравнивается с минимально допустимыми толщинами из `f1` и `f2`;
+- если не проходит ни одна допустимая формула, фиксируется ошибка.
+
+Что именно контролируется:
+
+- количество элементов в структуре;
+- минимальная толщина стекол;
+- минимальная толщина рамок;
+- соответствие одной из допустимых формул.
+
+Дополнительные данные:
+
+- в `context` сохраняются фактические толщины, требования, индексы несоответствий и детализация по каждому проблемному элементу.
+
+### 4.3. Контроль полноты аргона по камерам
+
+Код ошибки:
+
+- `ARGON_INCOMPLETE`
+
+Где реализован:
+
+- `scripts/procedures/check_argon.sql`
+
+Логика:
+
+- если аргон указан хотя бы в одной рамке, он должен быть указан во всех;
+- если аргон не указан нигде, ошибка не создается.
+
+Что контролируется:
+
+- единообразие заполнения камер аргоном.
+
+### 4.4. Контроль наличия данных по стеклам в справочнике
+
+Код ошибки:
+
+- `GLASS_NOT_FOUND`
+
+Где реализован:
+
+- `scripts/procedures/check_missing_glass.sql`
+
+Логика:
+
+- стекла, выделенные из формулы, сопоставляются с `article_json`;
+- если по стеклу отсутствуют артикул или тип стекла, фиксируется ошибка.
+
+Что контролируется:
+
+- полнота справочной информации по стеклам, используемой в заказе.
+
+### 4.5. Контроль обязательной закалки по формуле слипания
+
+Код ошибки:
+
+- `SLIP_TEMPER_REQUIRED`
+
+Где реализован:
+
+- `scripts/procedures/check_slip_tempered.sql`
+
+Логика:
+
+- если `position_formula_slip` требует стекло с признаком `з`, то в позиции должны присутствовать закаленные стекла;
+- проверка выполняется по `article_json` и признакам обработки.
+
+Что контролируется:
+
+- соблюдение требования по закалке, зафиксированного в формуле слипания.
+
+### 4.6. Итоговый контроль статуса позиции
+
+Где реализован:
+
+- `scripts/procedures/recalc_overall.sql`
+
+Логика:
+
+- если есть ошибки, позиция получает `overall_status = ERROR`;
+- если есть предупреждения без ошибок, позиция получает `WARN`;
+- если нарушений нет, позиция получает `OK`.
+
+Дополнительно:
+
+- все тексты проблем агрегируются в `overall_message`.
+
+## 5. Оркестрация контролей
+
+Где реализована:
+
+- `scripts/procedures/trg_qual_checks_after.sql`
+
+Последовательность:
+
+1. `reset_pos_issues`
+2. `check_argon`
+3. `check_missing_glass`
+4. `check_slip`
+5. `check_slip_tempered`
+6. `recalc_overall`
+
+Следствие:
+
+- при повторном пересчете позиции старые ошибки удаляются и формируется актуальный набор.
+
+## 6. Реализованные прикладные проверки в Python
+
+### 6.1. Пропуск контроля слипания для одиночного остекления
+
+Где реализован:
+
+- `web/app.py`
+- `bot/handlers/document_handler.py`
+- `Analyzer.has_spacer`
+
+Логика:
+
+- если в формуле нет признака дистанционной рамки, позиция сохраняется без запуска проверки слипания.
+
+### 6.2. Учет направления открывания
+
+Где реализован:
+
+- `bot/services/pdf_parser.py`
+- `bot/services/analyzer.py`
+- `scripts/procedures/check_slip.sql`
+
+Логика:
+
+- если позиция помечена как открывание наружу, порядок элементов в формуле переворачивается перед сравнением.
+
+### 6.3. Учет триплекса
+
+Где реализован:
+
+- `Analyzer.parse_formula`
+
+Логика:
+
+- пленки для триплекса из справочника `films` учитываются как связующие элементы;
+- соседние стекла могут быть объединены в один элемент "триплекс";
+- толщина такого элемента рассчитывается суммарно.
+
+### 6.4. Учет признака закалки
+
+Где реализован:
+
+- `Analyzer.parse_formula`
+
+Логика:
+
+- признак закалки распознается:
+  - по маркерам `з` или `зак` в формуле;
+  - по справочнику `art_rules` через `type_of_processing = Закаленное`.
+
+## 7. Выходные артефакты контроля
+
+Система формирует:
+
+- JSON-ответ web API;
+- текстовый отчет в Telegram;
+- записи в `qual_analize_files`;
+- записи в `qual_analize_pos`;
+- записи в `qual_analize_pos_issues`.
+
+## 8. Контроли, которые упоминаются, но не доведены до эксплуатационного уровня
+
+По репозиторию видны заготовки или следы следующих направлений:
+
+- использование `qual_analize_rules` в текущем Python-коде отсутствует;
+- использование `qual_analize_prompts` в текущем Python-коде отсутствует;
+- в комментариях `trg_qual_checks_after.sql` упомянуты будущие проверки `check_layout_rules` и `check_slip_structure`, но они не реализованы как активные контроли;
+- в web-сценарии справочник `art_rules` не подгружается, поэтому определение закалки по данным Directus в этом канале частично уступает Telegram-сценарию.
+
+## 9. Сводный перечень активных кодов ошибок
+
+- `SLIP_FORMULA_MISSING`
+- `SLIP_MISMATCH`
+- `SLIP_TEMPER_REQUIRED`
+- `ARGON_INCOMPLETE`
+- `GLASS_NOT_FOUND`
+
+## 10. Полезные ссылки по реализации
+
+- [web/app.py](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/web/app.py)
+- [bot/handlers/document_handler.py](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/bot/handlers/document_handler.py)
+- [bot/services/analyzer.py](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/bot/services/analyzer.py)
+- [bot/services/pdf_parser.py](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/bot/services/pdf_parser.py)
+- [scripts/procedures/check_slip.sql](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/scripts/procedures/check_slip.sql)
+- [scripts/procedures/check_argon.sql](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/scripts/procedures/check_argon.sql)
+- [scripts/procedures/check_missing_glass.sql](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/scripts/procedures/check_missing_glass.sql)
+- [scripts/procedures/check_slip_tempered.sql](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/scripts/procedures/check_slip_tempered.sql)
+- [scripts/procedures/recalc_overall.sql](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/scripts/procedures/recalc_overall.sql)
+- [scripts/procedures/trg_qual_checks_after.sql](/Users/romangaleev/CodeProject/Ecookna/Ecookna_QualAnalize/scripts/procedures/trg_qual_checks_after.sql)
