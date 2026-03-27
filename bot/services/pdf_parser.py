@@ -322,6 +322,66 @@ class PDFParser:
         return item
 
     @classmethod
+    def _row_formula_words(
+        cls,
+        row: Dict[str, Any],
+        formula_left: float,
+        size_left: float,
+    ) -> List[Dict[str, Any]]:
+        return [
+            word
+            for word in row["words"]
+            if float(word["x0"]) >= formula_left and float(word["x1"]) < size_left
+        ]
+
+    @classmethod
+    def _is_formula_prefix_row(
+        cls,
+        row: Dict[str, Any],
+        formula_left: float,
+        size_left: float,
+    ) -> bool:
+        if any(cls.NUMBER_RE.fullmatch(cls._word_text(word)) for word in row["words"]):
+            return False
+
+        formula_words = cls._row_formula_words(row, formula_left, size_left)
+        if not formula_words:
+            return False
+
+        formula_text = cls._normalize_spaces(" ".join(cls._word_text(word) for word in formula_words))
+        if not formula_text:
+            return False
+
+        if cls._is_service_token(formula_text):
+            return False
+
+        if cls.ANCHOR_RE.search(formula_text):
+            return False
+
+        if re.fullmatch(r"[\d\s.,-]+", formula_text):
+            return False
+
+        return cls._looks_like_formula_start(formula_text)
+
+    @classmethod
+    def _take_formula_prefix_rows(
+        cls,
+        rows_before_number: List[Dict[str, Any]],
+        formula_left: float,
+        size_left: float,
+    ) -> List[Dict[str, Any]]:
+        prefix_rows: List[Dict[str, Any]] = []
+
+        for row in reversed(rows_before_number):
+            if cls._is_formula_prefix_row(row, formula_left, size_left):
+                prefix_rows.append(row)
+                continue
+            break
+
+        prefix_rows.reverse()
+        return prefix_rows
+
+    @classmethod
     def _parse_page_by_geometry(cls, page_words: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         rows = cls._group_words_into_rows(page_words)
         headers = cls._find_table_headers(rows)
@@ -332,10 +392,12 @@ class PDFParser:
         header_index = 0
         current_header = headers[header_index]
         current_rows: List[Dict[str, Any]] = []
+        pre_number_rows: List[Dict[str, Any]] = []
 
         def flush_current_rows() -> None:
-            nonlocal current_rows
+            nonlocal current_rows, pre_number_rows
             if not current_rows:
+                pre_number_rows = []
                 return
             item = cls._parse_item_from_rows(
                 current_rows,
@@ -352,12 +414,14 @@ class PDFParser:
                 )
                 items.append(item)
             current_rows = []
+            pre_number_rows = []
 
         for row in rows:
             if header_index + 1 < len(headers) and row["top"] >= headers[header_index + 1]["top"]:
                 flush_current_rows()
                 header_index += 1
                 current_header = headers[header_index]
+                pre_number_rows = []
 
             if row["top"] <= current_header["bottom"]:
                 continue
@@ -372,12 +436,20 @@ class PDFParser:
                 for word in row["words"]
             )
             if has_number:
-                flush_current_rows()
-                current_rows = [row]
+                if current_rows:
+                    flush_current_rows()
+                current_rows = cls._take_formula_prefix_rows(
+                    pre_number_rows,
+                    formula_left=current_header["formula_left"],
+                    size_left=current_header["size_left"],
+                ) + [row]
+                pre_number_rows = []
                 continue
 
             if current_rows:
                 current_rows.append(row)
+            else:
+                pre_number_rows.append(row)
 
         flush_current_rows()
         return items

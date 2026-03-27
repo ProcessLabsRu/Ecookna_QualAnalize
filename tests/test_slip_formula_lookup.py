@@ -260,3 +260,57 @@ HSolar (40 мм)
     assert len(items) == 1
     assert items[0]["position_formula"] == "4ИxW14RAL7011Arx4М1xW14RAL7011Arx4LHSolar"
     assert "falling back to regex parser" in caplog.text
+
+
+def test_pdf_parser_geometry_keeps_formula_prefix_row_above_position_number():
+    text = """Заполнения 88-177-1030 от 17.03.2026
+Кол-
+Номер Формула Размер Площадь Масса
+во
+8LPHPNeutral60/40закxW18RAL7040Arx6М1
+88-177-1030/1/5
+xW18RAL7040Arx6М1xW18RAL7040Arx6LP 1772x2448 3 13.01 874.75
+Заполнение
+PremiumTзак (80 мм)
+Раскладка отсутствует
+Итого по изделию:
+Количество элементов - 3
+"""
+
+    PDFParser._last_extracted_text = text
+    PDFParser._last_extracted_pages = [
+        {
+            "text": text,
+            "words": [
+                {"text": "Кол-", "x0": 457.5, "x1": 480.0, "top": 56.6, "bottom": 62.0},
+                {"text": "Номер", "x0": 58.1, "x1": 95.0, "top": 62.6, "bottom": 68.0},
+                {"text": "Формула", "x0": 245.9, "x1": 300.0, "top": 62.6, "bottom": 68.0},
+                {"text": "Размер", "x0": 401.7, "x1": 450.0, "top": 62.6, "bottom": 68.0},
+                {"text": "Площадь", "x0": 491.8, "x1": 540.0, "top": 62.6, "bottom": 68.0},
+                {"text": "Масса", "x0": 552.2, "x1": 590.0, "top": 62.6, "bottom": 68.0},
+                {"text": "во", "x0": 462.7, "x1": 475.0, "top": 68.6, "bottom": 74.0},
+                {"text": "8LPHPNeutral60/40закxW18RAL7040Arx6М1", "x0": 154.1, "x1": 387.4, "top": 84.3, "bottom": 90.0},
+                {"text": "88-177-1030/1/5", "x0": 35.5, "x1": 116.2, "top": 90.3, "bottom": 96.0},
+                {"text": "xW18RAL7040Arx6М1xW18RAL7040Arx6LP", "x0": 155.9, "x1": 385.7, "top": 96.3, "bottom": 102.0},
+                {"text": "1772x2448", "x0": 394.0, "x1": 450.0, "top": 96.3, "bottom": 102.0},
+                {"text": "3", "x0": 466.3, "x1": 470.0, "top": 96.3, "bottom": 102.0},
+                {"text": "13.01", "x0": 503.5, "x1": 535.0, "top": 96.3, "bottom": 102.0},
+                {"text": "874.75", "x0": 552.3, "x1": 585.0, "top": 96.3, "bottom": 102.0},
+                {"text": "Заполнение", "x0": 43.2, "x1": 110.0, "top": 102.3, "bottom": 108.0},
+                {"text": "PremiumTзак", "x0": 214.4, "x1": 285.2, "top": 108.3, "bottom": 114.0},
+                {"text": "(80", "x0": 288.2, "x1": 305.0, "top": 108.3, "bottom": 114.0},
+                {"text": "мм)", "x0": 307.1, "x1": 323.0, "top": 108.3, "bottom": 114.0},
+                {"text": "Раскладка", "x0": 459.1, "x1": 518.9, "top": 124.1, "bottom": 130.0},
+                {"text": "отсутствует", "x0": 518.9, "x1": 590.0, "top": 124.1, "bottom": 130.0},
+                {"text": "Итого", "x0": 0.8, "x1": 33.0, "top": 139.1, "bottom": 145.0},
+                {"text": "по", "x0": 34.9, "x1": 49.0, "top": 139.1, "bottom": 145.0},
+                {"text": "изделию:", "x0": 51.3, "x1": 95.0, "top": 139.1, "bottom": 145.0},
+            ],
+        }
+    ]
+
+    items = PDFParser.parse_text(text)
+
+    assert len(items) == 1
+    assert items[0]["position_num"] == "88-177-1030/1/5"
+    assert items[0]["position_formula"] == "8LPHPNeutral60/40закxW18RAL7040Arx6М1xW18RAL7040Arx6М1xW18RAL7040Arx6LPPremiumTзак"
