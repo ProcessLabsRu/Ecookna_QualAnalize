@@ -150,18 +150,14 @@ async def check_file(
         
         for item in items:
             # Skip slip analysis for single glazing (no spacer frame in formula)
-            formula_source = item.get("raw_formula") or item.get("position_formula") or ""
+            formula_source = item["position_formula"]
             if not analyzer.has_spacer(formula_source):
                 qpos = QualPos(
                     file_id=qfile.id,
                     position_num=item["position_num"],
                     position_formula=item["position_formula"],
-                    position_raskl=item["position_raskl"],
                     position_width=item["position_width"],
                     position_hight=item["position_hight"],
-                    position_count=item["position_count"],
-                    position_area=item["position_area"],
-                    position_mass=item["position_mass"],
                     is_oytside=item["is_oytside"],
                     article_json=item
                 )
@@ -183,12 +179,8 @@ async def check_file(
                 file_id=qfile.id,
                 position_num=item["position_num"],
                 position_formula=item["position_formula"],
-                position_raskl=item["position_raskl"],
                 position_width=w,
                 position_hight=h,
-                position_count=item["position_count"],
-                position_area=item["position_area"],
-                position_mass=item["position_mass"],
                 is_oytside=item["is_oytside"],
                 article_json=item
             )
@@ -215,8 +207,7 @@ async def check_file(
                     "size": f"{w}x{h}",
                     "formula": item["position_formula"],
                     "is_outside": item["is_oytside"],
-                    "errors": error_details,
-                    "raskl": item["position_raskl"]
+                    "errors": error_details
                 })
 
         await session.commit()
