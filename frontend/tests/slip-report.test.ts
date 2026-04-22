@@ -26,8 +26,8 @@ test("formatSearchResultText includes thickness and weight in copied report", ()
     null,
   )
 
-  assert.match(text, /8-14-8 \(30мм, 62,5кг\)/)
-  assert.match(text, /6-16-6-14-6 \(48мм, 70,31кг\)/)
+  assert.match(text, /8-14-8 \(30мм; 62,5кг\)/)
+  assert.match(text, /6-16-6-14-6 \(48мм; 70,31кг\)/)
 })
 
 test("formatSearchResultText keeps weight when total thickness is missing", () => {
@@ -69,5 +69,5 @@ test("formatFormulaSummary uses only glass thickness for weight", () => {
     },
   )
 
-  assert.equal(text, "4-12-4 (20мм, 31,25кг)")
+  assert.equal(text, "4-12-4 (20мм; 31,25кг)")
 })

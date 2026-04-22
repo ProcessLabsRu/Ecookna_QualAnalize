@@ -105,7 +105,7 @@ export function formatFormulaSummary(
   }
 
   return parts.length > 0
-    ? `${formulaDetail.formula} (${parts.join(", ")})`
+    ? `${formulaDetail.formula} (${parts.join("; ")})`
     : formulaDetail.formula
 }
 
