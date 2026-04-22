@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
+  formatFormulaSummary,
   formatSearchResultText,
   SlipLookupResponse,
   splitMarkingLines,
@@ -196,10 +197,10 @@ function SearchResultView({
                     >
                       <span className="mt-1 size-2 rounded-full bg-primary" />
                       <span className="font-mono text-sm">
-                        <span>{formulaDetail.formula}</span>
-                        {formulaDetail.total_thickness != null ? (
-                          <span className="ml-1 text-red-600">({formulaDetail.total_thickness})</span>
-                        ) : null}
+                        {formatFormulaSummary(formulaDetail, {
+                          width: result.width,
+                          height: result.height,
+                        })}
                       </span>
                     </li>
                   ))}

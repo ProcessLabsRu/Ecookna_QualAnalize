@@ -37,9 +37,76 @@ export function splitMarkingLines(marking: string | null) {
 }
 
 export function formatFormulaWithThickness(formulaDetail: FormulaDetail) {
-  return formulaDetail.total_thickness == null
-    ? formulaDetail.formula
-    : `${formulaDetail.formula} (${formulaDetail.total_thickness})`
+  return formulaDetail.formula
+}
+
+function extractFormulaSegments(formula: string) {
+  const normalized = formula
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/[^0-9-]/g, "")
+
+  if (!normalized) {
+    return []
+  }
+
+  return normalized
+    .split("-")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => Number(part))
+    .filter((part) => Number.isFinite(part))
+}
+
+export function getFormulaGlassThickness(formula: string) {
+  const segments = extractFormulaSegments(formula)
+  if (segments.length === 0) {
+    return null
+  }
+
+  const glassThickness = segments.reduce((sum, value, index) => {
+    return index % 2 === 0 ? sum + value : sum
+  }, 0)
+
+  return glassThickness > 0 ? glassThickness : null
+}
+
+export function calculateFormulaWeightKg(formula: string, width: number, height: number) {
+  const glassThickness = getFormulaGlassThickness(formula)
+  if (glassThickness == null || width <= 0 || height <= 0) {
+    return null
+  }
+
+  return (width / 1000) * (height / 1000) * glassThickness * 2.5
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("ru-RU", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
+export function formatFormulaSummary(
+  formulaDetail: FormulaDetail,
+  dimensions?: { width: number; height: number },
+) {
+  const parts: string[] = []
+
+  if (formulaDetail.total_thickness != null) {
+    parts.push(`${formulaDetail.total_thickness}мм`)
+  }
+
+  if (dimensions) {
+    const weight = calculateFormulaWeightKg(formulaDetail.formula, dimensions.width, dimensions.height)
+    if (weight != null) {
+      parts.push(`${formatNumber(weight)}кг`)
+    }
+  }
+
+  return parts.length > 0
+    ? `${formulaDetail.formula} (${parts.join(", ")})`
+    : formulaDetail.formula
 }
 
 export function formatSearchResultText(result: SlipLookupResponse | null, error: string | null) {
@@ -74,7 +141,14 @@ export function formatSearchResultText(result: SlipLookupResponse | null, error:
     const values = result.formula_details[key] || []
     if (values.length > 0) {
       lines.push(`${title}:`)
-      values.forEach((formulaDetail) => lines.push(formatFormulaWithThickness(formulaDetail)))
+      values.forEach((formulaDetail) =>
+        lines.push(
+          formatFormulaSummary(formulaDetail, {
+            width: result.width,
+            height: result.height,
+          }),
+        ),
+      )
     }
   })
 

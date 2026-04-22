@@ -1,14 +1,14 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 
-import { formatSearchResultText } from "../src/lib/slip-report.ts"
+import { formatFormulaSummary, formatSearchResultText } from "../src/lib/slip-report.ts"
 
-test("formatSearchResultText includes thickness in copied report", () => {
+test("formatSearchResultText includes thickness and weight in copied report", () => {
   const text = formatSearchResultText(
     {
       status: "success",
-      width: 2500,
-      height: 1500,
+      width: 1250,
+      height: 1250,
       width_round: 2500,
       height_round: 1500,
       marking: "8-14-8 6-16-6-14-6",
@@ -26,11 +26,11 @@ test("formatSearchResultText includes thickness in copied report", () => {
     null,
   )
 
-  assert.match(text, /8-14-8 \(30\)/)
-  assert.match(text, /6-16-6-14-6 \(48\)/)
+  assert.match(text, /8-14-8 \(30мм, 62,5кг\)/)
+  assert.match(text, /6-16-6-14-6 \(48мм, 70,31кг\)/)
 })
 
-test("formatSearchResultText skips thickness suffix when it is missing", () => {
+test("formatSearchResultText keeps weight when total thickness is missing", () => {
   const text = formatSearchResultText(
     {
       status: "success",
@@ -54,5 +54,20 @@ test("formatSearchResultText skips thickness suffix when it is missing", () => {
   )
 
   assert.match(text, /4-16-4/)
-  assert.doesNotMatch(text, /4-16-4 \(/)
+  assert.match(text, /4-16-4 \(24кг\)/)
+})
+
+test("formatFormulaSummary uses only glass thickness for weight", () => {
+  const text = formatFormulaSummary(
+    {
+      formula: "4-12-4",
+      total_thickness: 20,
+    },
+    {
+      width: 1250,
+      height: 1250,
+    },
+  )
+
+  assert.equal(text, "4-12-4 (20мм, 31,25кг)")
 })
